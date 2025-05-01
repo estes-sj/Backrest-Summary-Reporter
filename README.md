@@ -49,11 +49,12 @@ curl -X POST https://backrest-listener.teetunk.dev/summary \
   "repo": {{ .JsonMarshal .Repo.Id }},
   "plan": {{ .JsonMarshal .Plan.Id }},
   "snapshot": {{ .JsonMarshal .SnapshotId }},
-  {{- if .Error }}
-  "error": "{{ .JsonMarshal .Error }}"
-  {{- else if .SnapshotStats }}
   "snapshot_stats": {{ .JsonMarshal .SnapshotStats }}
-  {{- end }}
 }
 EOF
+```
+
+### Truncate all tables
+```sql
+TRUNCATE TABLE public.summaries, public.snapshot_stats RESTART IDENTITY CASCADE;
 ```

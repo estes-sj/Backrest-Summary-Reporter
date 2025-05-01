@@ -3,7 +3,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
-use chrono::Local;
+use chrono::{DateTime, Local, Utc};
 use sqlx::Row;
 use std::net::SocketAddr;
 
@@ -26,13 +26,13 @@ pub async fn summary_handler(
     }
 
     // Determine created_at timestamp in server's local timezone
-    let created_at = Local::now().to_rfc3339();
+    let created_at = Local::now().with_timezone(&Utc); // Use DateTime<Utc> for SQL compatibility
 
     // Insert into summaries, returning id and created_at
     let row = sqlx::query(
         "INSERT INTO summaries (created_at, task, time, event, repo, plan, snapshot)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, created_at::TEXT as created_at"
+         RETURNING id, created_at"
     )
     .bind(&created_at)
     .bind(&payload.task)
@@ -44,8 +44,8 @@ pub async fn summary_handler(
     .fetch_one(&pool)
     .await;
 
-    let (summary_id, created) = match row {
-        Ok(r) => (r.get::<i32, _>("id"), r.get::<String, _>("created_at")),
+    let (summary_id, created): (i32, DateTime<Utc>) = match row {
+        Ok(r) => (r.get("id"), r.get("created_at")),
         Err(e) => {
             eprintln!("DB insert summary error: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, "db error");
@@ -104,6 +104,6 @@ pub async fn summary_handler(
         return (StatusCode::INTERNAL_SERVER_ERROR, "db error");
     }
 
-    tracing::info!("Inserted summary {} at {} from {}", summary_id, created, addr);
+    tracing::info!("Inserted summary {} at {} from {}", summary_id, created.to_rfc3339(), addr);
     (StatusCode::OK, "ok")
 }
