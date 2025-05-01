@@ -1,0 +1,13 @@
+services:
+  backrest-listener:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backrest-listener
+    #ports:
+    #  - "2682:2682"
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - ./logs/Backrest_Listener.log:/app/Backrest_Listener.log
+    network_mode: host
