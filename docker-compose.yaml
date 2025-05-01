@@ -1,13 +1,30 @@
 services:
+  backrest-listener-db:
+    image: postgres:17
+    container_name: backrest-listener-db
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: backrest-listener-db
+    volumes:
+      - backrest-listener-db-data:/var/lib/postgresql/data
+    ports:
+      - "57432:5432"
+
   backrest-listener:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: backrest-listener
-    #ports:
-    #  - "2682:2682"
+    depends_on:
+      - backrest-listener-db
     environment:
-      - TZ=America/New_York
+      DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-listener-db/backrest-listener-db
+      TZ: America/New_York
+    ports:
+      - "2682:2682"
     volumes:
       - ./logs/Backrest_Listener.log:/app/Backrest_Listener.log
-    network_mode: host
+
+volumes:
+  backrest-listener-db-data:
