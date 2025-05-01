@@ -10,14 +10,15 @@ pub async fn init_db(database_url: &str) -> Result<PgPool> {
     // Create summaries table with created_at timestamp column
     pool.execute(r#"
         CREATE TABLE IF NOT EXISTS summaries (
-          id         SERIAL PRIMARY KEY,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          task       TEXT NOT NULL,
-          time       TEXT NOT NULL,
-          event      TEXT NOT NULL,
-          repo       TEXT NOT NULL,
-          plan       TEXT NOT NULL,
-          snapshot   TEXT NOT NULL
+          id             SERIAL PRIMARY KEY,
+          created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+          task           TEXT NOT NULL,
+          time           TEXT NOT NULL,
+          event          TEXT NOT NULL,
+          repo           TEXT NOT NULL,
+          plan           TEXT NOT NULL,
+          snapshot       TEXT NOT NULL,
+          error          TEXT
         );
     "#).await?;
 

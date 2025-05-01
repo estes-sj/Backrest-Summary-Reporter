@@ -49,7 +49,11 @@ curl -X POST https://backrest-listener.teetunk.dev/summary \
   "repo": {{ .JsonMarshal .Repo.Id }},
   "plan": {{ .JsonMarshal .Plan.Id }},
   "snapshot": {{ .JsonMarshal .SnapshotId }},
+  {{- if .Error }}
+  "error": {{ .JsonMarshal .Error }}
+  {{- else if .SnapshotStats }}
   "snapshot_stats": {{ .JsonMarshal .SnapshotStats }}
+  {{- end }}
 }
 EOF
 ```
@@ -58,3 +62,25 @@ EOF
 ```sql
 TRUNCATE TABLE public.summaries, public.snapshot_stats RESTART IDENTITY CASCADE;
 ```
+
+### Test Methods
+
+#### Success Snapshot
+```
+curl -X POST https://backrest-listener.teetunk.dev/summary \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: q2134gfq45gh34ygaqw4ertgsaawesrg" \
+     -d @tests/example.json
+```
+
+#### Bad API Key
+curl -X POST https://backrest-listener.teetunk.dev/summary \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: HELLO WORLD" \
+     -d @tests/example.json
+
+#### Error
+curl -X POST https://backrest-listener.teetunk.dev/summary \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: q2134gfq45gh34ygaqw4ertgsaawesrg" \
+     -d @tests/error.json

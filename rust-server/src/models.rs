@@ -37,5 +37,6 @@ pub struct SummaryPayload {
     pub repo: String,
     pub plan: String,
     pub snapshot: String,
-    pub snapshot_stats: SnapshotStats,
+    pub error: Option<String>,
+    pub snapshot_stats: Option<SnapshotStats>,
 }
