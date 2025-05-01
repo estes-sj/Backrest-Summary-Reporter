@@ -48,12 +48,9 @@ curl -X POST https://backrest-listener.teetunk.dev/summary \
   "event": "{{ .EventName .Event }}",
   "repo": {{ .JsonMarshal .Repo.Id }},
   "plan": {{ .JsonMarshal .Plan.Id }},
-  "snapshot": {{ .JsonMarshal .SnapshotId }},
-  {{- if .Error }}
-  "error": {{ .JsonMarshal .Error }}
-  {{- else if .SnapshotStats }}
-  "snapshot_stats": {{ .JsonMarshal .SnapshotStats }}
-  {{- end }}
+  "snapshot": {{ .JsonMarshal .SnapshotId }}{{ if .Error }},
+  "error": {{ .JsonMarshal .Error }}{{ else if .SnapshotStats }},
+  "snapshot_stats": {{ .JsonMarshal .SnapshotStats }}{{ end }}
 }
 EOF
 ```
@@ -84,3 +81,7 @@ curl -X POST https://backrest-listener.teetunk.dev/summary \
      -H "Content-Type: application/json" \
      -H "X-API-Key: q2134gfq45gh34ygaqw4ertgsaawesrg" \
      -d @tests/error.json
+
+## Setup on Backrest
+
+- Recommend using in `Repository` settings instead of `Plan` settings (or whichever is less)
