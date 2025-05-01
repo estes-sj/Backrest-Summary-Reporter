@@ -38,9 +38,10 @@
 which is a result of:
 
 ```bash
-cat <<EOF | curl -X POST https://backrest-listener.teetunk.dev/summary \
-  -H "Content-Type: application/json" \
-  --data-binary @-
+curl -X POST https://backrest-listener.teetunk.dev/summary \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: q2134gfq45gh34ygaqw4ertgsaawesrg" \
+     --data-binary @- <<EOF
 {
   "task": {{ .JsonMarshal .Task }},
   "time": "{{ .FormatTime .CurTime }}",
