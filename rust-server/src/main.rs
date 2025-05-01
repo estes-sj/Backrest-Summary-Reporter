@@ -1,11 +1,11 @@
 use axum::{
     extract::{ConnectInfo, Json, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     routing::post,
     Router,
 };
 use anyhow::Context;
-use chrono::Local;
+use chrono::{DateTime, Local, Utc};
 use dotenv::dotenv;
 use serde::Deserialize;
 use sqlx::{Executor, PgPool, Row};
@@ -54,17 +54,20 @@ struct SummaryPayload {
 async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
+    let auth_key = env::var("AUTH_KEY").context("AUTH_KEY must be set")?;
     let pool = PgPool::connect(&database_url).await?;
 
+    // Create tables with created_at column
     pool.execute(r#"
         CREATE TABLE IF NOT EXISTS summaries (
-          id       SERIAL PRIMARY KEY,
-          task     TEXT NOT NULL,
-          time     TEXT NOT NULL,
-          event    TEXT NOT NULL,
-          repo     TEXT NOT NULL,
-          plan     TEXT NOT NULL,
-          snapshot TEXT NOT NULL
+          id         SERIAL PRIMARY KEY,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          task       TEXT NOT NULL,
+          time       TEXT NOT NULL,
+          event      TEXT NOT NULL,
+          repo       TEXT NOT NULL,
+          plan       TEXT NOT NULL,
+          snapshot   TEXT NOT NULL
         );
     "#).await?;
 
@@ -100,7 +103,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app = Router::new()
         .route("/summary", post(handle_summary))
-        .with_state(pool);
+        .with_state((pool, auth_key));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 2682));
     println!("Listening on {}", addr);
@@ -116,14 +119,24 @@ async fn main() -> Result<(), anyhow::Error> {
 
 async fn handle_summary(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(pool): State<PgPool>,
+    State((pool, auth_key)): State<(PgPool, String)>,
+    headers: HeaderMap,
     Json(payload): Json<SummaryPayload>,
 ) -> (StatusCode, &'static str) {
-    // Insert into summaries and fetch id
+    // API key validation
+    let provided = headers
+        .get("X-API-Key")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if provided != auth_key {
+        return (StatusCode::UNAUTHORIZED, "unauthorized");
+    }
+
+    // Insert into summaries and return id, created_at
     let row = sqlx::query(
         "INSERT INTO summaries (task, time, event, repo, plan, snapshot)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id"
+         RETURNING id, created_at::TEXT as created_at"
     )
     .bind(&payload.task)
     .bind(&payload.time)
@@ -134,15 +147,18 @@ async fn handle_summary(
     .fetch_one(&pool)
     .await;
 
-    let summary_id: i32 = match row {
-        Ok(r) => r.get("id"),
+    let (summary_id, created_at): (i32, String) = match row {
+        Ok(r) => (
+            r.get::<i32, _>("id"),
+            r.get::<String, _>("created_at"),
+        ),
         Err(e) => {
             eprintln!("DB insert summary error: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, "db error");
         }
     };
 
-    // Insert into snapshot_stats
+    // Insert snapshot_stats
     let s = payload.snapshot_stats;
     if let Err(e) = sqlx::query(
         "INSERT INTO snapshot_stats (
@@ -195,10 +211,11 @@ async fn handle_summary(
     }
 
     println!(
-        "{} - Inserted summary {} from {}",
+        "{} - Inserted summary {} from {} (created_at: {})",
         Local::now().format("%Y-%m-%d %H:%M:%S"),
         summary_id,
-        addr
+        addr,
+        created_at
     );
     (StatusCode::OK, "ok")
 }

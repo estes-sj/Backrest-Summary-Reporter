@@ -21,10 +21,12 @@ services:
     environment:
       DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-listener-db/backrest-listener-db
       TZ: America/New_York
+      AUTH_KEY: ${AUTH_KEY}
     ports:
       - "2682:2682"
     volumes:
       - ./logs/Backrest_Listener.log:/app/Backrest_Listener.log
 
+# TODO - Move this to a normal directory so that we can back it up
 volumes:
   backrest-listener-db-data:
