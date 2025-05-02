@@ -34,7 +34,7 @@ pub struct SnapshotStats {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SummaryPayload {
     pub task: String,
-    pub time: String,            // ISO8601 timestamp as string
+    pub time: DateTime<Utc>,
     pub event: String,
     pub repo: String,
     pub plan: String,
@@ -56,7 +56,7 @@ pub struct CombinedStats {
     pub summary_id: i32,
     pub created_at: DateTime<Utc>,
     pub task: String,
-    pub time: String,
+    pub time: DateTime<Utc>,
     pub event: String,
     pub repo: String,
     pub plan: String,

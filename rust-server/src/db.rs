@@ -13,7 +13,7 @@ pub async fn init_db(database_url: &str) -> Result<PgPool> {
           id             SERIAL PRIMARY KEY,
           created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
           task           TEXT NOT NULL,
-          time           TEXT NOT NULL,
+          time           TIMESTAMPTZ NOT NULL,
           event          TEXT NOT NULL,
           repo           TEXT NOT NULL,
           plan           TEXT NOT NULL,

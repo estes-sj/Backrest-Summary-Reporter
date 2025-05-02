@@ -17,11 +17,10 @@ pub async fn summary_handler(
     headers: HeaderMap,
     Json(payload): Json<SummaryPayload>,
 ) -> impl IntoResponse {
-    // API key validation
-    let provided = headers.get("X-API-Key").and_then(|v| v.to_str().ok()).unwrap_or("");
-    if provided != auth_key {
-        tracing::warn!("Unauthorized request from {}: provided API key '{}'", addr, provided);
-        return (StatusCode::UNAUTHORIZED, "unauthorized");
+
+    // Validate API Key
+    if let Err(e) = validate_api_key_with_ip(&headers, &auth_key, addr) {
+        return e;
     }
 
     // Determine created_at timestamp in server's local timezone
@@ -52,7 +51,7 @@ pub async fn summary_handler(
         }
     };
 
- // Insert snapshot_stats if present
+    // Insert snapshot_stats if present
     if let Some(stats) = payload.snapshot_stats {
         if let Err(e) = sqlx::query(
             "INSERT INTO snapshot_stats (
@@ -109,17 +108,17 @@ pub async fn summary_handler(
     (StatusCode::OK, "ok")
 }
 
+/// HTTP handler for `/get_stats` endpoint.
+/// Validates API key, takes in a start_date and end_date, returns the queried data between the provided times
 pub async fn get_stats_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State((pool, auth_key)): State<(PgPool, String)>,
     headers: HeaderMap,
     Json(req): Json<StatsRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    // API key validation
-    let provided = headers.get("X-API-Key").and_then(|v| v.to_str().ok()).unwrap_or("");
-    if provided != auth_key {
-        tracing::warn!("Unauthorized request from {}: provided API key '{}'", addr, provided);
-        return (StatusCode::UNAUTHORIZED, "unauthorized");
-    }
+
+    // Validate API Key
+    validate_api_key_with_ip(&headers, &auth_key, addr)?;
 
     // Dynamic query_as, mapping into CombinedStats (FromRow)
     let rows: Vec<CombinedStats> = sqlx::query_as::<_, CombinedStats>(
@@ -138,7 +137,7 @@ pub async fn get_stats_handler(
           ss.total_bytes, ss.bytes_done, ss.current_files
         FROM summaries s
         LEFT JOIN snapshot_stats ss ON ss.summary_id = s.id
-        WHERE s.created_at BETWEEN $1 AND $2
+        WHERE s.time BETWEEN $1 AND $2
         "#
     )
     .bind(req.start_date)
@@ -151,4 +150,30 @@ pub async fn get_stats_handler(
     })?;
 
     Ok((StatusCode::OK, Json(rows)))
+}
+
+///
+/// HELPER METHODS
+/// 
+
+pub fn validate_api_key_with_ip(
+    headers: &HeaderMap,
+    expected_key: &str,
+    addr: SocketAddr,
+) -> Result<(), (StatusCode, &'static str)> {
+    let provided = headers
+        .get("X-API-Key")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if provided != expected_key {
+        tracing::warn!(
+            "Unauthorized request from {}: provided API key '{}'",
+            addr,
+            provided
+        );
+        return Err((StatusCode::UNAUTHORIZED, "unauthorized"));
+    }
+
+    Ok(())
 }
