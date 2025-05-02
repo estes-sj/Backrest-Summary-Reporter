@@ -85,3 +85,8 @@ curl -X POST https://backrest-listener.teetunk.dev/summary \
 ## Setup on Backrest
 
 - Recommend using in `Repository` settings instead of `Plan` settings (or whichever is less)
+
+### Backrest Events
+
+#### Snapshot start/end
+These operations appear to not have a snapshot ID associated with them

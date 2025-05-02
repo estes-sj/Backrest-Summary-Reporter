@@ -4,11 +4,10 @@ use axum::{
     response::IntoResponse,
 };
 use chrono::{DateTime, Local, Utc};
-use sqlx::Row;
+use sqlx::{Row, PgPool};
 use std::net::SocketAddr;
 
-use crate::models::SummaryPayload;
-use sqlx::PgPool;
+use crate::models::{SummaryPayload, StatsRequest, CombinedStats};
 
 /// HTTP handler for `/summary` endpoint.
 /// Validates API key, inserts summary and snapshot_stats into the database.
@@ -106,6 +105,50 @@ pub async fn summary_handler(
         }
     }
 
-    tracing::info!("Inserted summary {} at {} from {}", summary_id, created.to_rfc3339(), addr);
+    tracing::info!("Event with ID {} at {} from {}", summary_id, created.to_rfc3339(), addr);
     (StatusCode::OK, "ok")
+}
+
+pub async fn get_stats_handler(
+    State((pool, auth_key)): State<(PgPool, String)>,
+    headers: HeaderMap,
+    Json(req): Json<StatsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    // API key validation
+    let provided = headers.get("X-API-Key").and_then(|v| v.to_str().ok()).unwrap_or("");
+    if provided != auth_key {
+        tracing::warn!("Unauthorized request from {}: provided API key '{}'", addr, provided);
+        return (StatusCode::UNAUTHORIZED, "unauthorized");
+    }
+
+    // Dynamic query_as, mapping into CombinedStats (FromRow)
+    let rows: Vec<CombinedStats> = sqlx::query_as::<_, CombinedStats>(
+        r#"
+        SELECT
+          s.id AS summary_id,
+          s.created_at,
+          s.task, s.time, s.event, s.repo, s.plan, s.snapshot, s.error,
+          ss.message_type, ss.error       AS ss_error, ss.during, ss.item,
+          ss.files_new, ss.files_changed, ss.files_unmodified,
+          ss.dirs_new, ss.dirs_changed, ss.dirs_unmodified,
+          ss.data_blobs, ss.tree_blobs, ss.data_added,
+          ss.total_files_processed, ss.total_bytes_processed,
+          ss.total_duration, ss.snapshot_id AS ss_snapshot,
+          ss.percent_done, ss.total_files, ss.files_done,
+          ss.total_bytes, ss.bytes_done, ss.current_files
+        FROM summaries s
+        LEFT JOIN snapshot_stats ss ON ss.summary_id = s.id
+        WHERE s.created_at BETWEEN $1 AND $2
+        "#
+    )
+    .bind(req.start_date)
+    .bind(req.end_date)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| {
+        eprintln!("DB query error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+    })?;
+
+    Ok((StatusCode::OK, Json(rows)))
 }
