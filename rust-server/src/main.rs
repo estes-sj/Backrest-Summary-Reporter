@@ -9,12 +9,11 @@ use axum::{Router, routing::post};
 use axum::extract::connect_info::IntoMakeServiceWithConnectInfo;
 use config::Config;
 use db::init_db;
-use handlers::{summary_handler,get_stats_handler};
+use handlers::{summary_handler,get_stats_handler,test_email_handler};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing::{info};
 use tracing_subscriber::{fmt, EnvFilter};
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/summary", post(summary_handler))
         .route("/get_stats", post(get_stats_handler))
+        .route("/test_email", post(test_email_handler))
         .with_state((pool, cfg.auth_key));
 
     // Bind to address and wrap with connect info

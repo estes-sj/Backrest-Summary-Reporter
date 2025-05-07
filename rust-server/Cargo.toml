@@ -14,3 +14,13 @@ dotenv = "0.15"
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dependencies.lettre]
+version = "0.11"
+default-features = false
+features = [
+  "builder",            # enable Message::builder()
+  "smtp-transport",     # enable AsyncSmtpTransport
+  "tokio1",             # enable Tokio1Executor
+  "tokio1-native-tls",  # glue Tokio1 + native-tls
+]

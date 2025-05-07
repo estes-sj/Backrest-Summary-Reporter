@@ -5,8 +5,14 @@ use axum::{
 };
 use chrono::{DateTime, Local, Utc};
 use sqlx::{Row, PgPool};
-use std::net::SocketAddr;
-
+use std::{env, net::SocketAddr};
+use lettre::{
+    Message,
+    transport::smtp::{AsyncSmtpTransport, authentication::Credentials},
+    Tokio1Executor,
+    Transport,            // for sync .send, though you won’t need this here
+    AsyncTransport,       // <-- import this to get async .send(...)
+};
 use crate::models::{SummaryPayload, StatsRequest, CombinedStats};
 
 /// HTTP handler for `/summary` endpoint.
@@ -176,4 +182,80 @@ pub fn validate_api_key_with_ip(
     }
 
     Ok(())
+}
+
+
+/// GET or POST /test_email
+pub async fn test_email_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State((_, auth_key)): State<(PgPool, String)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    // 1) API key + IP check
+    if let Err(err) = validate_api_key_with_ip(&headers, &auth_key, addr) {
+        return err;
+    }
+
+    // 2) Load SMTP settings from env
+    let smtp_host = match env::var("SMTP_HOST") {
+        Ok(h) => h,
+        Err(_) => {
+            tracing::error!("SMTP_HOST not set");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Missing SMTP_HOST");
+        }
+    };
+    let smtp_username = env::var("SMTP_USERNAME").unwrap_or_default();
+    let smtp_password = env::var("SMTP_PASSWORD").unwrap_or_default();
+    let from_addr = match env::var("EMAIL_FROM") {
+        Ok(a) => a.parse().expect("EMAIL_FROM is not a valid address"),
+        Err(_) => {
+            tracing::error!("EMAIL_FROM not set");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Missing EMAIL_FROM");
+        }
+    };
+    let to_addr = match env::var("EMAIL_TO") {
+        Ok(a) => a.parse().expect("EMAIL_TO is not a valid address"),
+        Err(_) => {
+            tracing::error!("EMAIL_TO not set");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Missing EMAIL_TO");
+        }
+    };
+
+    // 3) Build the email
+    let email = match Message::builder()
+        .from(from_addr)
+        .to(to_addr)
+        .subject("🚀 Test email from Axum + Lettre")
+        .body(String::from("This is a test email sent from your /test_email endpoint."))
+    {
+        Ok(msg) => msg,
+        Err(e) => {
+            tracing::error!("Failed to build email: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Email build error");
+        }
+    };
+
+    // 4) Configure and send via async SMTP transport
+    let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)
+        .and_then(|builder| {
+            let creds = Credentials::new(smtp_username.clone(), smtp_password.clone());
+            Ok(builder.credentials(creds).build())
+        })
+        .map_err(|e| {
+            tracing::error!("SMTP relay setup failed: {}", e);
+            e
+        });
+
+    let mailer = match mailer {
+        Ok(m) => m,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "SMTP config error"),
+    };
+
+    match mailer.send(email).await {
+        Ok(_) => (StatusCode::OK, "Test email sent successfully"),
+        Err(e) => {
+            tracing::error!("Failed to send test email: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send email")
+        }
+    }
 }

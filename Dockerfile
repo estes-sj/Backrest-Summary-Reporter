@@ -20,7 +20,4 @@ COPY --from=builder /app/rust-server/target/release/rust-server .
 # Ensure the log file exists
 RUN touch /app/Backrest_Listener.log
 
-# If you have a .env file:
-#COPY rust-server/.env .env
-
 CMD ["./rust-server"]
