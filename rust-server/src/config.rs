@@ -1,7 +1,8 @@
+use std::{env, net::SocketAddr};
+
 use anyhow::{Context, Result};
 use chrono::Local;
 use dotenv::dotenv;
-use std::{env, net::SocketAddr};
 
 /// Application configuration loaded from environment variables.
 #[derive(Clone)]

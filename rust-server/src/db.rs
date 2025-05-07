@@ -1,5 +1,5 @@
-use sqlx::{Executor, PgPool};
 use anyhow::Result;
+use sqlx::{Executor, PgPool};
 
 /// Initialize the database connection and ensure required tables exist.
 /// Returns a configured PgPool.

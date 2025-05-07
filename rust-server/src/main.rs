@@ -1,17 +1,18 @@
-// src/main.rs
-
 mod config;
 mod db;
 mod handlers;
 mod models;
 
-use axum::{Router, routing::get, routing::post};
-use config::Config;
-use db::init_db;
-use handlers::{summary_handler,get_stats_handler,test_email_handler};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing_subscriber::{fmt, EnvFilter};
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use config::Config;
+use db::init_db;
+use handlers::{get_stats_handler, summary_handler, test_email_handler};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -31,8 +31,6 @@ services:
       EMAIL_TO: ${EMAIL_TO}
     ports:
       - "2682:2682"
-    volumes: # TODO: - Remove
-      - ./logs/Backrest_Listener.log:/app/Backrest_Listener.log
 
 # TODO: - Move this to a normal directory so that we can back it up
 volumes:

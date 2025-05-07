@@ -19,7 +19,4 @@ WORKDIR /app
 COPY --from=builder /app/rust-server/target/release/rust-server .
 COPY --from=builder /app/rust-server/html ./html
 
-# Ensure the log file exists
-RUN touch /app/Backrest_Listener.log
-
 CMD ["./rust-server"]

@@ -4,16 +4,18 @@ use axum::{
     response::IntoResponse,
 };
 use chrono::{DateTime, Local, Utc};
-use sqlx::{Row, PgPool};
-use std::{net::SocketAddr, fs, path::Path};
+use std::{fs, net::SocketAddr, path::Path};
+use sqlx::{PgPool, Row};
 use lettre::{
-    message::{Message, header::ContentType},
-    transport::smtp::{AsyncSmtpTransport, authentication::Credentials},
+    AsyncTransport,
+    message::{header::ContentType, Message},
+    transport::smtp::{authentication::Credentials, AsyncSmtpTransport},
     Tokio1Executor,
-    AsyncTransport, // for .send(...) on async transport
 };
-use crate::models::{SummaryPayload, StatsRequest, CombinedStats};
-use crate::config::Config;
+use crate::{
+    config::Config,
+    models::{CombinedStats, StatsRequest, SummaryPayload},
+};
 
 /// HTTP handler for `/summary` endpoint.
 /// Validates API key, inserts summary and snapshot_stats into the database.
@@ -60,23 +62,55 @@ pub async fn summary_handler(
     // Insert snapshot_stats if present
     if let Some(stats) = payload.snapshot_stats {
         if let Err(e) = sqlx::query(
-            "INSERT INTO snapshot_stats (
-                summary_id, message_type, error, during, item,
-                files_new, files_changed, files_unmodified,
-                dirs_new, dirs_changed, dirs_unmodified,
-                data_blobs, tree_blobs, data_added,
-                total_files_processed, total_bytes_processed,
-                total_duration, snapshot_id, percent_done,
-                total_files, files_done, total_bytes, bytes_done, current_files
+            r#"
+            INSERT INTO snapshot_stats (
+                -- General information
+                summary_id,
+                message_type,
+                error,
+                during,
+                item,
+    
+                -- File stats
+                files_new,
+                files_changed,
+                files_unmodified,
+    
+                -- Directory stats
+                dirs_new,
+                dirs_changed,
+                dirs_unmodified,
+    
+                -- Blob stats
+                data_blobs,
+                tree_blobs,
+                data_added,
+    
+                -- Processing stats
+                total_files_processed,
+                total_bytes_processed,
+                total_duration,
+    
+                -- Snapshot info
+                snapshot_id,
+                percent_done,
+    
+                -- Progress info
+                total_files,
+                files_done,
+                total_bytes,
+                bytes_done,
+                current_files
             ) VALUES (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8,
-                $9, $10, $11,
-                $12, $13, $14,
-                $15, $16,
-                $17, $18, $19,
-                $20, $21, $22, $23, $24
-            )"
+                $1, $2, $3, $4, $5,      -- General information
+                $6, $7, $8,              -- File stats
+                $9, $10, $11,            -- Directory stats
+                $12, $13, $14,           -- Blob stats
+                $15, $16, $17,           -- Processing stats
+                $18, $19,                -- Snapshot info
+                $20, $21, $22, $23, $24  -- Progress info
+            )
+            "#
         )
         .bind(summary_id)
         .bind(&stats.message_type)
@@ -130,22 +164,57 @@ pub async fn get_stats_handler(
     let rows: Vec<CombinedStats> = sqlx::query_as::<_, CombinedStats>(
         r#"
         SELECT
-          s.id AS summary_id,
-          s.created_at,
-          s.task, s.time, s.event, s.repo, s.plan, s.snapshot, s.error,
-          ss.message_type, ss.error       AS ss_error, ss.during, ss.item,
-          ss.files_new, ss.files_changed, ss.files_unmodified,
-          ss.dirs_new, ss.dirs_changed, ss.dirs_unmodified,
-          ss.data_blobs, ss.tree_blobs, ss.data_added,
-          ss.total_files_processed, ss.total_bytes_processed,
-          ss.total_duration, ss.snapshot_id AS ss_snapshot,
-          ss.percent_done, ss.total_files, ss.files_done,
-          ss.total_bytes, ss.bytes_done, ss.current_files
+            -- Summary fields
+            s.id AS summary_id,
+            s.created_at,
+            s.task,
+            s.time,
+            s.event,
+            s.repo,
+            s.plan,
+            s.snapshot,
+            s.error,
+    
+            -- Snapshot stats fields
+            ss.message_type,
+            ss.error AS ss_error,
+            ss.during,
+            ss.item,
+    
+            -- File stats
+            ss.files_new,
+            ss.files_changed,
+            ss.files_unmodified,
+    
+            -- Directory stats
+            ss.dirs_new,
+            ss.dirs_changed,
+            ss.dirs_unmodified,
+    
+            -- Blob stats
+            ss.data_blobs,
+            ss.tree_blobs,
+            ss.data_added,
+    
+            -- Processing stats
+            ss.total_files_processed,
+            ss.total_bytes_processed,
+            ss.total_duration,
+            ss.snapshot_id AS ss_snapshot,
+    
+            -- Progress
+            ss.percent_done,
+            ss.total_files,
+            ss.files_done,
+            ss.total_bytes,
+            ss.bytes_done,
+            ss.current_files
+    
         FROM summaries s
         LEFT JOIN snapshot_stats ss ON ss.summary_id = s.id
         WHERE s.time BETWEEN $1 AND $2
         "#
-    )
+    )    
     .bind(req.start_date)
     .bind(req.end_date)
     .fetch_all(&pool)
@@ -198,6 +267,7 @@ pub async fn test_email_handler(
         .from(from.parse().expect("valid EMAIL_FROM"))
         .to(to.parse().expect("valid EMAIL_TO"))
         .header(ContentType::TEXT_HTML)
+        .subject("🚀 Test Email")
         .body(html)
         .map_err(|e| {
             tracing::error!("Failed to build email: {}", e);
@@ -217,7 +287,10 @@ pub async fn test_email_handler(
     mailer
         .send(email)
         .await
-        .map(|_| (StatusCode::OK, "Test email sent"))
+        .map(|_| {
+            tracing::info!("Test email successfully sent to {}", to);
+            (StatusCode::OK, "Test email sent")
+        })
         .map_err(|e| {
             tracing::error!("Failed to send email: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send email")
