@@ -5,14 +5,12 @@ mod db;
 mod handlers;
 mod models;
 
-use axum::{Router, routing::post};
-use axum::extract::connect_info::IntoMakeServiceWithConnectInfo;
+use axum::{Router, routing::get, routing::post};
 use config::Config;
 use db::init_db;
 use handlers::{summary_handler,get_stats_handler,test_email_handler};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use tracing::{info};
 use tracing_subscriber::{fmt, EnvFilter};
 
 #[tokio::main]
@@ -29,16 +27,18 @@ async fn main() -> anyhow::Result<()> {
     // Initialize database and create tables
     let pool = init_db(&cfg.database_url).await?;
 
-    // Build router
+    // use cfg to bind first
+    let listener = TcpListener::bind(cfg.listen_addr).await?;
+    tracing::info!("Listening on {}", cfg.listen_addr);
+
+    // now move cfg into the router
     let app = Router::new()
         .route("/summary", post(summary_handler))
         .route("/get_stats", post(get_stats_handler))
-        .route("/test_email", post(test_email_handler))
-        .with_state((pool, cfg.auth_key));
+        .route("/test_email", get(test_email_handler))
+        .with_state((pool, cfg));
 
-    // Bind to address and wrap with connect info
-    let listener = TcpListener::bind(cfg.listen_addr).await?;
-    tracing::info!("Listening on {}", cfg.listen_addr);
+    // serve
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),

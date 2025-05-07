@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+      <title>SMTP Test Email</title>
+      <style>
+         /* Simplified CSS without variables */
+         * { box-sizing: border-box; margin: 0; padding: 0; }
+         body {
+         font-family: Arial, sans-serif;
+         background: #f9f9f9;
+         color: #404040;
+         line-height: 1.5;
+         padding: 16px;
+         }
+         a { color: #0066cc; text-decoration: none; }
+         a:hover { text-decoration: underline; }
+         .container {
+         max-width: 800px;
+         margin: 0 auto;
+         background: #fff;
+         border-radius: 6px;
+         overflow: hidden;
+         }
+         header {
+         background: #e0e0e0;
+         padding: 16px;
+         text-align: center;
+         }
+         header h1 { font-size: 1.5rem; margin-bottom: 8px; color: #404040; }
+         header p { color: #606060; font-size: 0.9rem; }
+         .content {
+         padding: 16px;
+         }
+         .content p { margin-bottom: 12px; font-size: 0.9rem; }
+         .button {
+         display: inline-block;
+         padding: 10px 20px;
+         background: #0066cc;
+         color: #fff;
+         text-decoration: none;
+         border-radius: 4px;
+         font-size: 0.9rem;
+         }
+         .footer {
+         background: #f0f0f0;
+         padding: 16px;
+         text-align: center;
+         font-size: 0.8rem;
+         color: #606060;
+         }
+         @media screen and (max-width: 600px) {
+         .container { width: 100% !important; }
+         .button { width: 100%; text-align: center; }
+         }
+      </style>
+   </head>
+   <body>
+      <div class="container">
+         <header>
+            <h1>SMTP Configuration Test</h1>
+            <p>If you can read this email, your SMTP setup is working correctly.</p>
+         </header>
+         <div class="content">
+            <p>Hello!</p>
+            <p>This is a <strong>test email</strong> sent to verify your SMTP server configuration.</p>
+         </div>
+         <!-- footer -->
+         <div class="footer">
+            <p>Report generated on: <strong>{{TIMESTAMP}}</strong></p>
+            <p>
+               <a href="#">Backrest</a> |
+               <a href="#">PG Admin</a> |
+               <a href="#">GitHub</a>
+            </p>
+         </div>
+      </div>
+   </body>
+</html>

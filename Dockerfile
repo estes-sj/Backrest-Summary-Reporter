@@ -4,6 +4,7 @@ FROM rust:1.82 as builder
 WORKDIR /app/rust-server
 COPY rust-server/Cargo.toml .
 COPY rust-server/src ./src
+COPY rust-server/html ./html
 
 RUN cargo build --release
 
@@ -16,6 +17,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=builder /app/rust-server/target/release/rust-server .
+COPY --from=builder /app/rust-server/html ./html
 
 # Ensure the log file exists
 RUN touch /app/Backrest_Listener.log
