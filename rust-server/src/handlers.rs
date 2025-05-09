@@ -5,7 +5,7 @@ use axum::{
 };
 use chrono::{DateTime, Local, Utc};
 use fs2::{free_space, total_space};
-use std::{fs, net::SocketAddr, path::Path};
+use std::{collections::HashMap, fs, net::SocketAddr, path::Path};
 use sqlx::{PgPool, Row};
 use lettre::{
     AsyncTransport,
@@ -14,7 +14,7 @@ use lettre::{
     Tokio1Executor,
 };
 use crate::{
-    config::Config,
+    config::{Config,StorageConfig},
     models::{CombinedStats, CurrentStorageStats, DbStorageRow, StatsRequest, SummaryPayload, StorageReport},
 };
 
@@ -369,8 +369,14 @@ pub async fn get_current_storage_stats_handler(
     // 1) API key + IP check
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // 2) Query for the latest entry per storage_location
+    // 2) Build a map of configured mounts: path -> nickname
+    let mut mount_map: HashMap<String, Option<String>> = HashMap::new();
+    for StorageConfig { path, nickname } in &cfg.storage_mounts {
+        mount_map.insert(path.clone(), nickname.clone());
+    }
+
     // TODO: Test when there is a location in the table and not in the env and vice versa
+    // 3) Fetch latest rows for all storage locations
     let db_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
         r#"
         SELECT DISTINCT ON (storage_location)
@@ -390,31 +396,37 @@ pub async fn get_current_storage_stats_handler(
         (StatusCode::INTERNAL_SERVER_ERROR, "db error")
     })?;
 
-    // 3) Map into response DTO, computing free_bytes & percent_used
-    let results: Vec<CurrentStorageStats> = db_rows
-        .into_iter()
-        .map(|r| {
-            let used = r.storage_used_bytes;
-            let total = r.storage_total_bytes;
-            let free = total.saturating_sub(used);
-            let pct = if total > 0 {
+    // 4) Filter & map into response, only for configured mounts
+    let mut results = Vec::with_capacity(cfg.storage_mounts.len());
+    for StorageConfig { path, .. } in &cfg.storage_mounts {
+        // find a matching DB row
+        if let Some(row) = db_rows.iter().find(|r| &r.storage_location == path) {
+            let used  = row.storage_used_bytes;
+            let total = row.storage_total_bytes;
+            let free  = total.saturating_sub(used);
+            let pct   = if total > 0 {
                 (used as f64 / total as f64) * 100.0
             } else {
                 0.0
             };
-            CurrentStorageStats {
-                location:     r.storage_location,
-                nickname:     r.storage_nickname,
+
+            // Prefer the configured nickname over the stored one
+            let nickname = mount_map.get(path).cloned().unwrap_or(row.storage_nickname.clone());
+
+            results.push(CurrentStorageStats {
+                location:     path.clone(),
+                nickname,
                 used_bytes:   used,
                 free_bytes:   free,
                 total_bytes:  total,
                 percent_used: pct,
-                time_added:   r.time_added,
-            }
-        })
-        .collect();
+                time_added:   row.time_added,
+            });
+        }
+        // Optionally, else: you could push a default entry for mounts with no DB row yet
+    }
 
-    // 4) Return JSON
+    tracing::info!("Returned current storage stats to {}", addr);
     Ok((StatusCode::OK, Json(results)))
 }
 
