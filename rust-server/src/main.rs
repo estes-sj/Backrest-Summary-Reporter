@@ -12,7 +12,7 @@ use axum::{
 };
 use config::Config;
 use db::init_db;
-use handlers::{get_stats_handler, summary_handler, test_email_handler};
+use handlers::{get_stats_handler, summary_handler, test_email_handler, storage_stats_handler};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,6 +37,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/summary", post(summary_handler))
         .route("/get_stats", post(get_stats_handler))
         .route("/test_email", get(test_email_handler))
+        .route("/storage_stats", post(storage_stats_handler))
         .with_state((pool, cfg));
 
     // serve

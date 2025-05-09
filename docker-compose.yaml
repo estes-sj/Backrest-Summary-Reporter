@@ -10,6 +10,7 @@ services:
       - backrest-listener-db-data:/var/lib/postgresql/data
     ports:
       - "57432:5432"
+    restart: unless-stopped
 
   backrest-listener:
     build:
@@ -19,18 +20,50 @@ services:
     depends_on:
       - backrest-listener-db
     environment:
+      # Database URL Constructed From .env
       DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-listener-db/backrest-listener-db
+      # Timezone
       TZ: America/New_York
+      # Auth Key Used for Endpoints
       AUTH_KEY: ${AUTH_KEY}
+      # Log Level
       RUST_LOG: info
+      # SMTP Settings
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USERNAME: ${SMTP_USERNAME}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       EMAIL_FROM: ${EMAIL_FROM}
       EMAIL_TO: ${EMAIL_TO}
+      # Storage Settings
+      # Can supply as many as desired using the naming convention, starting at 1
+      # Paths are the path inside the container, which is the right side of the :
+      # NICK refers to the optional nickname used in the email reports.
+      STORAGE_PATH_1: ${STORAGE_PATH_1}
+      STORAGE_NICK_1: ${STORAGE_NICK_1}
+      STORAGE_PATH_2: ${STORAGE_PATH_2}
+      STORAGE_NICK_2: ${STORAGE_NICK_2}
+      STORAGE_PATH_3: ${STORAGE_PATH_3}
+      STORAGE_NICK_3: ${STORAGE_NICK_3}
+      STORAGE_PATH_4: ${STORAGE_PATH_4}
+      STORAGE_NICK_4: ${STORAGE_NICK_4}
+      STORAGE_PATH_5: ${STORAGE_PATH_5}
+      STORAGE_NICK_5: ${STORAGE_NICK_5}
+      STORAGE_PATH_6: ${STORAGE_PATH_6}
+      STORAGE_NICK_6: ${STORAGE_NICK_6}
+      STORAGE_PATH_7: ${STORAGE_PATH_7}
+      STORAGE_NICK_7: ${STORAGE_NICK_7}
+      STORAGE_PATH_8: ${STORAGE_PATH_8}
+      STORAGE_NICK_8: ${STORAGE_NICK_8}
+      STORAGE_PATH_9: ${STORAGE_PATH_9}
+      STORAGE_NICK_9: ${STORAGE_NICK_9}
     ports:
       - "2682:2682"
+    volumes:
+      # Recommended to keep them as read-only since we are only reading data
+      - /opt:/mnt/opt:ro
+      - /mnt:/mnt/mnt:ro
+    restart: unless-stopped
 
 # TODO: - Move this to a normal directory so that we can back it up
 volumes:

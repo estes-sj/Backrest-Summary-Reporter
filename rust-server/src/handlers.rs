@@ -4,7 +4,8 @@ use axum::{
     response::IntoResponse,
 };
 use chrono::{DateTime, Local, Utc};
-use std::{fs, net::SocketAddr, path::Path};
+use fs2::{free_space, total_space};
+use std::{env, fs, net::SocketAddr, path::Path};
 use sqlx::{PgPool, Row};
 use lettre::{
     AsyncTransport,
@@ -14,7 +15,7 @@ use lettre::{
 };
 use crate::{
     config::Config,
-    models::{CombinedStats, StatsRequest, SummaryPayload},
+    models::{CombinedStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
 /// HTTP handler for `/summary` endpoint.
@@ -297,7 +298,72 @@ pub async fn test_email_handler(
         })
 }
 
+/// POST Storage Stats
+pub async fn storage_stats_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State((pool, cfg)): State<(PgPool, Config)>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    // 1) API key + IP check
+    validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
+    // 2) Gather stats and insert
+    let mut reports = Vec::new();
+    let mut idx = 1;
+
+    loop {
+        let key_path = format!("STORAGE_PATH_{}", idx);
+        let path = match env::var(&key_path).ok().filter(|s| !s.is_empty()) {
+            Some(p) => p,
+            None => break,
+        };
+
+        let key_nick = format!("STORAGE_NICK_{}", idx);
+        let nickname = env::var(&key_nick).ok().filter(|s| !s.is_empty());
+
+        // Filesystem stats
+        let total_bytes = total_space(&path).map_err(|e| {
+            tracing::error!("Failed to stat total space for {}: {}", path, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
+        })?;
+        let free_bytes = free_space(&path).map_err(|e| {
+            tracing::error!("Failed to stat free space for {}: {}", path, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
+        })?;
+        let used_bytes = total_bytes.saturating_sub(free_bytes);
+
+        // Insert into DB
+        sqlx::query(
+            r#"
+            INSERT INTO storage (
+              storage_location,
+              storage_nickname,
+              storage_used_bytes,
+              storage_total_bytes
+            ) VALUES ($1, $2, $3, $4)
+            "#
+        )
+        .bind(&path)
+        .bind(&nickname)
+        .bind(used_bytes as i64)
+        .bind(total_bytes as i64)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("DB insert failed for {}: {}", path, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+        })?;
+
+        reports.push(StorageReport { location: path, nickname, used_bytes, total_bytes });
+        idx += 1;
+    }
+
+    // 3) Return JSON summary
+    tracing::info!("Storage statistics updated from {}.", addr);
+    Ok((StatusCode::OK, Json(reports)))
+}
+
+/// TODO: Move to utils class
 ///
 /// HELPER METHODS
 /// 

@@ -88,3 +88,12 @@ pub struct CombinedStats {
     pub bytes_done: Option<i64>,
     pub current_files: Option<i64>,
 }
+
+/// Storing the stats for a storage
+#[derive(Serialize)]
+pub struct StorageReport {
+    pub location:    String,
+    pub nickname:    Option<String>,
+    pub used_bytes:  u64,
+    pub total_bytes: u64,
+}

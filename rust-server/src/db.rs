@@ -53,5 +53,17 @@ pub async fn init_db(database_url: &str) -> Result<PgPool> {
         );
     "#).await?;
 
+    // Create storage statistics table
+    pool.execute(r#"
+        CREATE TABLE IF NOT EXISTS storage (
+          id                     SERIAL PRIMARY KEY,
+          storage_location       TEXT NOT NULL,
+          storage_nickname       TEXT,
+          time_added             TIMESTAMPTZ NOT NULL DEFAULT now(),
+          storage_used_bytes     BIGINT,
+          storage_total_bytes    BIGINT
+        );
+    "#).await?;
+
     Ok(pool)
 }
