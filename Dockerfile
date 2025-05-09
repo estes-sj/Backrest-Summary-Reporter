@@ -1,5 +1,5 @@
 # 1. Builder stage – use a Rust 1.82+ image
-FROM rust:1.82 as builder
+FROM rust:1.82 AS builder
 
 WORKDIR /app/rust-server
 COPY rust-server/Cargo.toml .

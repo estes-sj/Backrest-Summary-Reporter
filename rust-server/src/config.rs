@@ -22,6 +22,16 @@ pub struct Config {
     pub smtp_password: Option<String>,
     pub email_from: Option<String>,
     pub email_to: Option<String>,
+
+    // --- Storage mounts to monitor ---
+    pub storage_mounts: Vec<StorageConfig>,
+}
+
+/// One storage mount to track
+#[derive(Clone)]
+pub struct StorageConfig {
+    pub path: String,
+    pub nickname: Option<String>,
 }
 
 impl Config {
@@ -51,6 +61,20 @@ impl Config {
         let email_from = env::var("EMAIL_FROM").ok();
         let email_to = env::var("EMAIL_TO").ok();
 
+        
+        // optional storage mounts
+        let mut storage_mounts = Vec::new();
+        for idx in 1.. {
+            let key_path = format!("STORAGE_PATH_{}", idx);
+            let path = match env::var(&key_path).ok().filter(|s| !s.is_empty()) {
+                Some(p) => p,
+                None => break,
+            };
+            let key_nick = format!("STORAGE_NICK_{}", idx);
+            let nickname = env::var(&key_nick).ok().filter(|s| !s.is_empty());
+            storage_mounts.push(StorageConfig { path, nickname });
+        }
+
         Ok(Config {
             database_url,
             auth_key,
@@ -61,6 +85,7 @@ impl Config {
             smtp_password,
             email_from,
             email_to,
+            storage_mounts,
         })
     }
 }
