@@ -15,7 +15,7 @@ use lettre::{
 };
 use crate::{
     config::Config,
-    models::{CombinedStats, StatsRequest, SummaryPayload, StorageReport},
+    models::{CombinedStats, CurrentStorageStats, DbStorageRow, StatsRequest, SummaryPayload, StorageReport},
 };
 
 /// HTTP handler for `/summary` endpoint.
@@ -358,6 +358,64 @@ pub async fn storage_stats_handler(
     // 4) Return JSON summary
     tracing::info!("Storage statistics updated from {}.", addr);
     Ok((StatusCode::OK, Json(reports)))
+}
+
+// GET /current_storage_stats
+pub async fn get_current_storage_stats_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State((pool, cfg)): State<(PgPool, Config)>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    // 1) API key + IP check
+    validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
+
+    // 2) Query for the latest entry per storage_location
+    // TODO: Test when there is a location in the table and not in the env and vice versa
+    let db_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
+        r#"
+        SELECT DISTINCT ON (storage_location)
+            storage_location,
+            storage_nickname,
+            storage_used_bytes,
+            storage_total_bytes,
+            time_added
+        FROM storage
+        ORDER BY storage_location, time_added DESC
+        "#,
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("DB query error for current storage stats: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+    })?;
+
+    // 3) Map into response DTO, computing free_bytes & percent_used
+    let results: Vec<CurrentStorageStats> = db_rows
+        .into_iter()
+        .map(|r| {
+            let used = r.storage_used_bytes;
+            let total = r.storage_total_bytes;
+            let free = total.saturating_sub(used);
+            let pct = if total > 0 {
+                (used as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            };
+            CurrentStorageStats {
+                location:     r.storage_location,
+                nickname:     r.storage_nickname,
+                used_bytes:   used,
+                free_bytes:   free,
+                total_bytes:  total,
+                percent_used: pct,
+                time_added:   r.time_added,
+            }
+        })
+        .collect();
+
+    // 4) Return JSON
+    Ok((StatusCode::OK, Json(results)))
 }
 
 /// TODO: Move to utils class

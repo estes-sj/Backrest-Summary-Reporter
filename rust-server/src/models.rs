@@ -97,3 +97,25 @@ pub struct StorageReport {
     pub used_bytes:  u64,
     pub total_bytes: u64,
 }
+
+/// The JSON shape returned for the current storage report
+#[derive(Serialize)]
+pub struct CurrentStorageStats {
+    pub location:     String,
+    pub nickname:     Option<String>,
+    pub used_bytes:   i64,
+    pub free_bytes:   i64,
+    pub total_bytes:  i64,
+    pub percent_used: f64,
+    pub time_added:   DateTime<Utc>,
+}
+
+/// Structure matching exactly the columns pulled from the DB
+#[derive(FromRow)]
+pub struct DbStorageRow {
+    pub storage_location:    String,
+    pub storage_nickname:    Option<String>,
+    pub storage_used_bytes:  i64,
+    pub storage_total_bytes: i64,
+    pub time_added:          DateTime<Utc>,
+}
