@@ -1,41 +1,48 @@
 services:
+  # PostgreSQL Database for storing backup metadata and statistics
   backrest-listener-db:
     image: postgres:17
     container_name: backrest-listener-db
     environment:
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: backrest-listener-db
+      POSTGRES_USER: ${DB_USERNAME}       # Username from .env
+      POSTGRES_PASSWORD: ${DB_PASSWORD}   # Password from .env
+      POSTGRES_DB: backrest-listener-db   # Database name
     volumes:
-      - backrest-listener-db-data:/var/lib/postgresql/data
+      - backrest-listener-db-data:/var/lib/postgresql/data  # Persistent DB volume
     ports:
-      - "57432:5432"
+      - "57432:5432"  # Expose PostgreSQL for local development/debug
     restart: unless-stopped
 
+  # Main Rust API service that checks mount status, manages backups, and sends emails
   backrest-listener:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: .                        # Path to project root 
+      dockerfile: Dockerfile            # Dockerfile to build from
     container_name: backrest-listener
     depends_on:
-      - backrest-listener-db
+      backrest-listener-db:
+        condition: service_started      # Wait for database to be available
+      rclone-mounter:
+        condition: service_healthy      # Wait for rclone FUSE mounts to be available
     environment:
-      # Database URL Constructed From .env
       DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-listener-db/backrest-listener-db
-      # Timezone
-      TZ: America/New_York
-      # Auth Key Used for Endpoints
-      AUTH_KEY: ${AUTH_KEY}
-      # Log Level
-      RUST_LOG: info
-      # SMTP Settings
+      TZ: America/New_York              # Set container timezone
+      AUTH_KEY: ${AUTH_KEY}             # API authentication key
+      RUST_LOG: info                    # Logging verbosity
+
+      # Email settings for report sending
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USERNAME: ${SMTP_USERNAME}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       EMAIL_FROM: ${EMAIL_FROM}
       EMAIL_TO: ${EMAIL_TO}
-      # Storage Settings
+
+      # Email scheduling and report configuration
+      EMAIL_FREQUENCY:      # e.g., "0 9 * * *" (cron-style) - leave empty to disable
+      STATS_INTERVAL:       # e.g., 24 (hours of data to include in report)
+
+      # Storage mount paths and nicknames (these paths must exist in the container)
       # Can supply as many as desired using the naming convention, starting at 1
       # Paths are the path inside the container, which is the right side of the :
       # NICK refers to the optional nickname used in the email reports.
@@ -49,22 +56,69 @@ services:
       STORAGE_NICK_4: ${STORAGE_NICK_4}
       STORAGE_PATH_5: ${STORAGE_PATH_5}
       STORAGE_NICK_5: ${STORAGE_NICK_5}
-      STORAGE_PATH_6: ${STORAGE_PATH_6}
-      STORAGE_NICK_6: ${STORAGE_NICK_6}
-      STORAGE_PATH_7: ${STORAGE_PATH_7}
-      STORAGE_NICK_7: ${STORAGE_NICK_7}
-      STORAGE_PATH_8: ${STORAGE_PATH_8}
-      STORAGE_NICK_8: ${STORAGE_NICK_8}
-      STORAGE_PATH_9: ${STORAGE_PATH_9}
-      STORAGE_NICK_9: ${STORAGE_NICK_9}
     ports:
-      - "2682:2682"
+      - "2682:2682"   # Expose API endpoint
     volumes:
-      # Recommended to keep them as read-only since we are only reading data
+      # Host bind-mounts for local or remote mount points (read-only since we are only pulling stats)
       - /opt:/mnt/opt:ro
       - /mnt:/mnt/mnt:ro
+      # Example for SSHFS or pre-mounted SFTP remote (uncomment if used)
+      # - /mnt/immich_remote:/mnt/mnt/immich_remote:ro
+      # Google Drive mountpoint from rclone container
+      # Ensure the folder exists on the host machine before running
+      # e.g. sudo mkdir -p /mnt-rclone/google_drive
+      - type: bind
+        source: /mnt-rclone/google_drive
+        target: /mnt-rclone/google_drive
+        bind:
+          propagation: shared      # Required to see FUSE mounts
     restart: unless-stopped
 
-# TODO: - Move this to a normal directory so that we can back it up
+  # Rclone container that handles mounting Google Drive via FUSE
+  rclone-mounter:
+    image: rclone/rclone:latest
+    container_name: rclone-mounter
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN               # Required for FUSE
+    devices:
+      - /dev/fuse               # Expose FUSE device
+    security_opt:
+      - apparmor:unconfined     # Unconfine AppArmor to allow FUSE mount
+    volumes:
+      # Config volume for rclone.conf
+      - type: bind
+        source: ./rclone/config
+        target: /config/rclone
+
+      # Optional: cache directory for VFS (improves stability/performance)
+      - type: bind
+        source: ./rclone/vfs-cache
+        target: /config/rclone/vfs-cache
+
+      # Mountpoint shared with host and other containers (Google Drive)
+      # Ensure the folder exists on the host machine before running
+      # e.g. sudo mkdir -p /mnt-rclone/google_drive
+      - type: bind
+        source: /mnt-rclone/google_drive
+        target: /mnt-rclone/google_drive
+        bind:
+          propagation: shared   # Allow mount propagation between containers
+    command: >
+      mount google_drive: /mnt-rclone/google_drive
+      --config=/config/rclone/rclone.conf
+      --allow-other
+      --allow-non-empty
+      --vfs-cache-mode writes
+      --cache-dir /config/rclone/vfs-cache
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q ' /mnt-rclone/google_drive ' /proc/mounts"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+
+# Persistent volumes for storing PostgreSQL data
 volumes:
   backrest-listener-db-data:
+    # TODO: Consider moving this to a backup-able directory path
