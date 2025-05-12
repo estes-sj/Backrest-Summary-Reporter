@@ -92,6 +92,9 @@ pub struct CombinedStats {
 /// Aggregated event totals over a time range
 #[derive(Serialize, FromRow)]
 pub struct EventTotals {
+    pub start_date:              DateTime<Utc>,
+    pub end_date:                DateTime<Utc>,
+
     pub total_events:            i64,
     pub total_snapshot_success:  i64,
     pub total_snapshot_error:    i64,
@@ -112,6 +115,15 @@ pub struct EventTotals {
     pub total_files_processed:   i64,
     pub total_bytes_processed:   i64,
     pub total_duration:          i64
+}
+
+// Event Totals for the polled date, the prior day, prior week, and prior month
+#[derive(Serialize)]
+pub struct EventTotalsReport {
+    pub current:        EventTotals,
+    pub previous_day:   Option<EventTotals>,
+    pub previous_week:  Option<EventTotals>,
+    pub previous_month: Option<EventTotals>,
 }
 
 /// Storing the stats for a storage
@@ -148,7 +160,7 @@ pub struct CurrentStorageStats {
 /// Combined report of event totals, summary statistics, and current storage stats
 #[derive(Serialize)]
 pub struct GenerateReport {
-    pub event_totals:       EventTotals,
+    pub event_totals:       EventTotalsReport,
     pub snapshot_summaries: Vec<CombinedStats>,
     pub storage_statistics: Vec<CurrentStorageStats>,
 }

@@ -15,7 +15,7 @@ use lettre::{
 };
 use crate::{
     config::{Config,StorageConfig},
-    models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
+    models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
 ///
@@ -80,7 +80,7 @@ pub async fn get_events_in_range_totals_handler(
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
     // 2) Fetch the aggregated totals
-    let totals = fetch_event_totals(&pool, req.start_date, req.end_date).await?;
+    let totals = load_event_totals_report(&pool, req.start_date, req.end_date).await?;
 
     // 3) Return JSON
     Ok((StatusCode::OK, Json(totals)))
@@ -207,7 +207,7 @@ pub async fn get_events_and_storage_stats_handler(
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
     // 2) Fetch the combined event totals
-    let event_totals = fetch_event_totals(&pool, req.start_date, req.end_date).await?;
+    let event_totals = load_event_totals_report(&pool, req.start_date, req.end_date).await?;
 
     // 3) Delegate to helper to fetch the combined stats between the request start and end date
     let snapshot_summaries = fetch_combined_stats(&pool, req.start_date, req.end_date).await?;
@@ -228,7 +228,7 @@ pub async fn get_events_and_storage_stats_handler(
 }
 
 ///
-/// HELPER METHODS
+/// DATABASE QUERY METHODS
 /// 
 
 /// Inserts a new summary (and optional snapshot_stats), returning `(id, created_at)`.
@@ -325,29 +325,6 @@ pub async fn insert_summary_with_stats(
     Ok((summary_id, created))
 }
 
-/// Validates the API key provided in the headers.
-pub fn validate_api_key_with_ip(
-    headers: &HeaderMap,
-    expected_key: &str,
-    addr: SocketAddr,
-) -> Result<(), (StatusCode, &'static str)> {
-    let provided = headers
-        .get("X-API-Key")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-
-    if provided != expected_key {
-        tracing::warn!(
-            "Unauthorized request from {}: provided API key '{}'",
-            addr,
-            provided
-        );
-        return Err((StatusCode::UNAUTHORIZED, "unauthorized"));
-    }
-
-    Ok(())
-}
-
 /// Fetches all `CombinedStats` between two instants, or returns a `(StatusCode, &str)` error.
 pub async fn fetch_combined_stats(
     pool: &PgPool,
@@ -412,6 +389,9 @@ pub async fn fetch_event_totals(
     let row: EventTotals = sqlx::query_as::<_, EventTotals>(
         r#"
         SELECT
+          $1::timestamptz  AS start_date,
+          $2::timestamptz  AS end_date,
+
           COALESCE(COUNT(*)                                                           , 0)::BIGINT AS total_events,
           COALESCE(SUM(CASE WHEN s.event ILIKE '%snapshot success%' THEN 1 ELSE 0 END), 0)::BIGINT AS total_snapshot_success,
           COALESCE(SUM(CASE WHEN s.event ILIKE '%snapshot error%'   THEN 1 ELSE 0 END), 0)::BIGINT AS total_snapshot_error,
@@ -448,6 +428,37 @@ pub async fn fetch_event_totals(
     })?;
 
     Ok(row)
+}
+
+/// Build a report of event totals for current, previous day/week/month.
+pub async fn load_event_totals_report(
+    pool: &PgPool,
+    start: DateTime<Utc>,
+    end:   DateTime<Utc>,
+) -> Result<EventTotalsReport, (StatusCode, &'static str)> {
+    // 1) Current window
+    let current = fetch_event_totals(pool, start, end).await?;
+
+    // 2) Compute cutoffs
+    let day_start   = start   - Duration::days(1);
+    let day_end     = end     - Duration::days(1);
+    let week_start  = start   - Duration::weeks(1);
+    let week_end    = end     - Duration::weeks(1);
+    let month_start = start   - Duration::days(30);
+    let month_end   = end     - Duration::days(30);
+
+    // 3) Previous windows
+    let previous_day   = fetch_event_totals(pool, day_start, day_end).await.ok();
+    let previous_week  = fetch_event_totals(pool, week_start, week_end).await.ok();
+    let previous_month = fetch_event_totals(pool, month_start, month_end).await.ok();
+
+    // 4) Assemble report
+    Ok(EventTotalsReport {
+        current,
+        previous_day,
+        previous_week,
+        previous_month,
+    })
 }
 
 /// Stats all mounts, inserts into the DB, and returns the summaries.
@@ -611,4 +622,31 @@ pub async fn load_storage_stats(
     }
 
     Ok(out)
+}
+
+///
+/// HELPER METHODS
+/// 
+
+/// Validates the API key provided in the headers.
+pub fn validate_api_key_with_ip(
+    headers: &HeaderMap,
+    expected_key: &str,
+    addr: SocketAddr,
+) -> Result<(), (StatusCode, &'static str)> {
+    let provided = headers
+        .get("X-API-Key")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if provided != expected_key {
+        tracing::warn!(
+            "Unauthorized request from {}: provided API key '{}'",
+            addr,
+            provided
+        );
+        return Err((StatusCode::UNAUTHORIZED, "unauthorized"));
+    }
+
+    Ok(())
 }
