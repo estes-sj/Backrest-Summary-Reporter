@@ -99,34 +99,25 @@ pub struct StorageReport {
 }
 
 /// The JSON shape returned for the current storage report
+// Period statistics grouping
+#[derive(Serialize)]
+pub struct PeriodStats {
+    pub used_bytes:  i64,
+    pub free_bytes:  i64,
+    pub total_bytes: i64,
+    pub percent_used: f64,
+    pub time_added:  DateTime<Utc>,
+}
+
+// Main response shape with nested periods
 #[derive(Serialize)]
 pub struct CurrentStorageStats {
-    pub location:     String,
-    pub nickname:     Option<String>,
-
-    pub used_bytes:   i64,
-    pub free_bytes:   i64,
-    pub total_bytes:  i64,
-    pub percent_used: f64,
-    pub time_added:   DateTime<Utc>,
-    
-    pub used_bytes_previous_day:      Option<i64>,
-    pub free_bytes_previous_day:      Option<i64>,
-    pub total_bytes_previous_day:     Option<i64>,
-    pub percent_used_previous_day:    Option<f64>,
-    pub time_added_previous_day:      Option<DateTime<Utc>>,
-
-    pub used_bytes_previous_week:     Option<i64>,
-    pub free_bytes_previous_week:     Option<i64>,
-    pub total_bytes_previous_week:    Option<i64>,
-    pub percent_used_previous_week:   Option<f64>,
-    pub time_added_previous_week:     Option<DateTime<Utc>>,
-
-    pub used_bytes_previous_month:    Option<i64>,
-    pub free_bytes_previous_month:    Option<i64>,
-    pub total_bytes_previous_month:   Option<i64>,
-    pub percent_used_previous_month:  Option<f64>,
-    pub time_added_previous_month:    Option<DateTime<Utc>>,
+    pub location:    String,
+    pub nickname:    Option<String>,
+    pub current:     PeriodStats,
+    pub previous_day:   Option<PeriodStats>,
+    pub previous_week:  Option<PeriodStats>,
+    pub previous_month: Option<PeriodStats>,
 }
 
 /// Structure matching exactly the columns pulled from the DB

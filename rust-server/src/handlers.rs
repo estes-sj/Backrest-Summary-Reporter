@@ -15,7 +15,7 @@ use lettre::{
 };
 use crate::{
     config::{Config,StorageConfig},
-    models::{CombinedStats, CurrentStorageStats, DbStorageRow, StatsRequest, SummaryPayload, StorageReport},
+    models::{CombinedStats, CurrentStorageStats, DbStorageRow, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
 /// HTTP handler for `/summary` endpoint.
@@ -369,14 +369,14 @@ pub async fn get_current_storage_stats_handler(
     // 1) API key + IP check
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // 2) Build a map of configured mounts: path -> nickname
+    // 2) Map configured mounts
     let mount_map: HashMap<String, Option<String>> =
         cfg.storage_mounts.iter()
             .map(|m| (m.path.clone(), m.nickname.clone()))
             .collect();
 
-    // 3) Fetch the latest row per mount
-    let current_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
+    // 3) Fetch latest per mount
+    let current_rows: Vec<DbStorageRow> = sqlx::query_as(
         r#"
         SELECT DISTINCT ON (storage_location)
             storage_location,
@@ -395,20 +395,16 @@ pub async fn get_current_storage_stats_handler(
         (StatusCode::INTERNAL_SERVER_ERROR, "db error")
     })?;
 
-    // Helper to fetch a single prior-row
+    // Helper to fetch prior row
     async fn fetch_prior(
         pool: &PgPool,
         path: &str,
         cutoff: DateTime<Utc>,
     ) -> Result<Option<DbStorageRow>, sqlx::Error> {
-        sqlx::query_as::<_, DbStorageRow>(
+        sqlx::query_as(
             r#"
-            SELECT
-                storage_location,
-                storage_nickname,
-                storage_used_bytes,
-                storage_total_bytes,
-                time_added
+            SELECT storage_location, storage_nickname, storage_used_bytes,
+                   storage_total_bytes, time_added
             FROM storage
             WHERE storage_location = $1
               AND time_added <= $2
@@ -422,88 +418,60 @@ pub async fn get_current_storage_stats_handler(
         .await
     }
 
-    // 4) Assemble results
+    // 4) Build response
     let mut results = Vec::with_capacity(cfg.storage_mounts.len());
-
     for StorageConfig { path, .. } in &cfg.storage_mounts {
         if let Some(cur) = current_rows.iter().find(|r| &r.storage_location == path) {
-            // Compute current metrics
-            let used   = cur.storage_used_bytes;
-            let total  = cur.storage_total_bytes;
-            let free   = total.saturating_sub(used);
-            let pct    = if total > 0 {
-                (used as f64 / total as f64) * 100.0
-            } else { 0.0 };
+            // pack a PeriodStats
+            let make_period = |row: &DbStorageRow| PeriodStats {
+                used_bytes: row.storage_used_bytes,
+                free_bytes: row.storage_total_bytes.saturating_sub(row.storage_used_bytes),
+                total_bytes: row.storage_total_bytes,
+                percent_used: if row.storage_total_bytes > 0 {
+                    (row.storage_used_bytes as f64 / row.storage_total_bytes as f64) * 100.0
+                } else { 0.0 },
+                time_added: row.time_added,
+            };
 
-            // Prepare cutoffs
-            let t_cur = cur.time_added;
-            let cut_day   = t_cur - Duration::days(1);
-            let cut_week  = t_cur - Duration::weeks(1);
-            let cut_month = t_cur - Duration::days(30);
+            let current = make_period(cur);
+            // cutoffs
+            let t = cur.time_added;
+            let d_cut = t - Duration::days(1);
+            let w_cut = t - Duration::weeks(1);
+            let m_cut = t - Duration::days(30);
 
-            // Fetch priors
-            let prev_day   = fetch_prior(&pool, path, cut_day).await.map_err(|e| {
+            // fetch periods
+            let d_row = fetch_prior(&pool, path, d_cut).await.map_err(|e| {
                 tracing::error!("DB fetch prior day for {}: {}", path, e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "db error")
             })?;
-            let prev_week  = fetch_prior(&pool, path, cut_week).await.map_err(|e| {
+            let w_row = fetch_prior(&pool, path, w_cut).await.map_err(|e| {
                 tracing::error!("DB fetch prior week for {}: {}", path, e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "db error")
             })?;
-            let prev_month = fetch_prior(&pool, path, cut_month).await.map_err(|e| {
+            let m_row = fetch_prior(&pool, path, m_cut).await.map_err(|e| {
                 tracing::error!("DB fetch prior month for {}: {}", path, e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "db error")
             })?;
 
-            // Helper to extract stats
-            let extract = |opt: Option<&DbStorageRow>| {
-                opt.map(|r| {
-                    let u = r.storage_used_bytes;
-                    let t = r.storage_total_bytes;
-                    let f = t.saturating_sub(u);
-                    let p = if t > 0 { (u as f64 / t as f64) * 100.0 } else { 0.0 };
-                    (u, f, t, p, r.time_added)
-                })
-            };
+            let previous_day   = d_row.as_ref().map(|r| make_period(r));
+            let previous_week  = w_row.as_ref().map(|r| make_period(r));
+            let previous_month = m_row.as_ref().map(|r| make_period(r));
 
-            let cur_day  = extract(prev_day.as_ref());
-            let cur_week = extract(prev_week.as_ref());
-            let cur_mon  = extract(prev_month.as_ref());
-
-            // Prefer config nickname
             let nickname = mount_map.get(path).cloned().unwrap_or(cur.storage_nickname.clone());
 
             results.push(CurrentStorageStats {
                 location: path.clone(),
                 nickname,
-                used_bytes:                   used,
-                free_bytes:                   free,
-                total_bytes:                  total,
-                percent_used:                 pct,
-                time_added:                   cur.time_added,
-
-                used_bytes_previous_day:      cur_day.map(|(u,_,_,_,_)| u),
-                free_bytes_previous_day:      cur_day.map(|(_,f,_,_,_)| f),
-                total_bytes_previous_day:     cur_day.map(|(_,_,t,_,_)| t),
-                percent_used_previous_day:    cur_day.map(|(_,_,_,p,_)| p),
-                time_added_previous_day:      cur_day.map(|(_,_,_,_,ta)| ta),
-
-                used_bytes_previous_week:     cur_week.map(|(u,_,_,_,_)| u),
-                free_bytes_previous_week:     cur_week.map(|(_,f,_,_,_)| f),
-                total_bytes_previous_week:    cur_week.map(|(_,_,t,_,_)| t),
-                percent_used_previous_week:   cur_week.map(|(_,_,_,p,_)| p),
-                time_added_previous_week:     cur_week.map(|(_,_,_,_,ta)| ta),
-
-                used_bytes_previous_month:    cur_mon.map(|(u,_,_,_,_)| u),
-                free_bytes_previous_month:    cur_mon.map(|(_,f,_,_,_)| f),
-                total_bytes_previous_month:   cur_mon.map(|(_,_,t,_,_)| t),
-                percent_used_previous_month:  cur_mon.map(|(_,_,_,p,_)| p),
-                time_added_previous_month:    cur_mon.map(|(_,_,_,_,ta)| ta),
+                current,
+                previous_day,
+                previous_week,
+                previous_month,
             });
         }
     }
 
-    tracing::info!("Returned enriched storage stats to {}", addr);
+    tracing::info!("Returned grouped storage stats to {}", addr);
     Ok((StatusCode::OK, Json(results)))
 }
 
