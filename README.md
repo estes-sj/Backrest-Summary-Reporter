@@ -94,7 +94,7 @@ These operations appear to not have a snapshot ID associated with them
 ## Setting up Storage Mounts
 Storage mounts are mounted to the main API service to track and send storage statistics. Currently, this has been tested to work for local drives, local network drives via SSHFS, and rclone via FUSE.
 
-Once exposed to the API container, storage paths can be tracked and recorded by adding them to the `.env` and/or `docker-compose.yaml`
+Once exposed to the API container, storage paths can be tracked and recorded by adding them to the `.env` and/or `docker-compose.yaml`.
 
 <p align="center">
     <img src="docs/img/storage_stats_email.png" alt="Storage Stats" width="60%"/>
@@ -183,7 +183,7 @@ See a full example `docker-compose.yaml` for rclone mounts [TODO: here)]().
 
 The below example shows the rclone `docker-compose.yaml` service that uses a pre-configured Google Drive mount `google_drive`. The pre-configured `rclone.conf` is stored in `./rclone/config` on the host machine.
 
-❗❗ Note: For these FUSE mounts to work, the folder to mount to on the host machine must exist. In the example configuration, you would need to run `sudo mkdir -p /mnt-rclone/google_drive` before running the first time (if it doesn't already exist). ❗❗
+❗❗ **Note:** For these FUSE mounts to work, the folder to mount to on the host machine must exist. In the example configuration, you would need to run `sudo mkdir -p /mnt-rclone/google_drive` before running the first time (if it doesn't already exist). ❗❗
 
 To create an rclone config, see the [official rclone docs](https://rclone.org/commands/rclone_config/) for more info.
 

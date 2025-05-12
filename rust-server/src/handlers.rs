@@ -3,7 +3,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Duration, Local, Utc};
 use fs2::{free_space, total_space};
 use std::{collections::HashMap, fs, net::SocketAddr, path::Path};
 use sqlx::{PgPool, Row};
@@ -370,14 +370,13 @@ pub async fn get_current_storage_stats_handler(
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
     // 2) Build a map of configured mounts: path -> nickname
-    let mut mount_map: HashMap<String, Option<String>> = HashMap::new();
-    for StorageConfig { path, nickname } in &cfg.storage_mounts {
-        mount_map.insert(path.clone(), nickname.clone());
-    }
+    let mount_map: HashMap<String, Option<String>> =
+        cfg.storage_mounts.iter()
+            .map(|m| (m.path.clone(), m.nickname.clone()))
+            .collect();
 
-    // TODO: Test when there is a location in the table and not in the env and vice versa
-    // 3) Fetch latest rows for all storage locations
-    let db_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
+    // 3) Fetch the latest row per mount
+    let current_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
         r#"
         SELECT DISTINCT ON (storage_location)
             storage_location,
@@ -392,41 +391,119 @@ pub async fn get_current_storage_stats_handler(
     .fetch_all(&pool)
     .await
     .map_err(|e| {
-        tracing::error!("DB query error for current storage stats: {}", e);
+        tracing::error!("DB query error: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, "db error")
     })?;
 
-    // 4) Filter & map into response, only for configured mounts
-    let mut results = Vec::with_capacity(cfg.storage_mounts.len());
-    for StorageConfig { path, .. } in &cfg.storage_mounts {
-        // find a matching DB row
-        if let Some(row) = db_rows.iter().find(|r| &r.storage_location == path) {
-            let used  = row.storage_used_bytes;
-            let total = row.storage_total_bytes;
-            let free  = total.saturating_sub(used);
-            let pct   = if total > 0 {
-                (used as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-
-            // Prefer the configured nickname over the stored one
-            let nickname = mount_map.get(path).cloned().unwrap_or(row.storage_nickname.clone());
-
-            results.push(CurrentStorageStats {
-                location:     path.clone(),
-                nickname,
-                used_bytes:   used,
-                free_bytes:   free,
-                total_bytes:  total,
-                percent_used: pct,
-                time_added:   row.time_added,
-            });
-        }
-        // Optionally, else: you could push a default entry for mounts with no DB row yet
+    // Helper to fetch a single prior-row
+    async fn fetch_prior(
+        pool: &PgPool,
+        path: &str,
+        cutoff: DateTime<Utc>,
+    ) -> Result<Option<DbStorageRow>, sqlx::Error> {
+        sqlx::query_as::<_, DbStorageRow>(
+            r#"
+            SELECT
+                storage_location,
+                storage_nickname,
+                storage_used_bytes,
+                storage_total_bytes,
+                time_added
+            FROM storage
+            WHERE storage_location = $1
+              AND time_added <= $2
+            ORDER BY time_added DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(path)
+        .bind(cutoff)
+        .fetch_optional(pool)
+        .await
     }
 
-    tracing::info!("Returned current storage stats to {}", addr);
+    // 4) Assemble results
+    let mut results = Vec::with_capacity(cfg.storage_mounts.len());
+
+    for StorageConfig { path, .. } in &cfg.storage_mounts {
+        if let Some(cur) = current_rows.iter().find(|r| &r.storage_location == path) {
+            // Compute current metrics
+            let used   = cur.storage_used_bytes;
+            let total  = cur.storage_total_bytes;
+            let free   = total.saturating_sub(used);
+            let pct    = if total > 0 {
+                (used as f64 / total as f64) * 100.0
+            } else { 0.0 };
+
+            // Prepare cutoffs
+            let t_cur = cur.time_added;
+            let cut_day   = t_cur - Duration::days(1);
+            let cut_week  = t_cur - Duration::weeks(1);
+            let cut_month = t_cur - Duration::days(30);
+
+            // Fetch priors
+            let prev_day   = fetch_prior(&pool, path, cut_day).await.map_err(|e| {
+                tracing::error!("DB fetch prior day for {}: {}", path, e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+            })?;
+            let prev_week  = fetch_prior(&pool, path, cut_week).await.map_err(|e| {
+                tracing::error!("DB fetch prior week for {}: {}", path, e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+            })?;
+            let prev_month = fetch_prior(&pool, path, cut_month).await.map_err(|e| {
+                tracing::error!("DB fetch prior month for {}: {}", path, e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+            })?;
+
+            // Helper to extract stats
+            let extract = |opt: Option<&DbStorageRow>| {
+                opt.map(|r| {
+                    let u = r.storage_used_bytes;
+                    let t = r.storage_total_bytes;
+                    let f = t.saturating_sub(u);
+                    let p = if t > 0 { (u as f64 / t as f64) * 100.0 } else { 0.0 };
+                    (u, f, t, p, r.time_added)
+                })
+            };
+
+            let cur_day  = extract(prev_day.as_ref());
+            let cur_week = extract(prev_week.as_ref());
+            let cur_mon  = extract(prev_month.as_ref());
+
+            // Prefer config nickname
+            let nickname = mount_map.get(path).cloned().unwrap_or(cur.storage_nickname.clone());
+
+            results.push(CurrentStorageStats {
+                location: path.clone(),
+                nickname,
+                used_bytes:                   used,
+                free_bytes:                   free,
+                total_bytes:                  total,
+                percent_used:                 pct,
+                time_added:                   cur.time_added,
+
+                used_bytes_previous_day:      cur_day.map(|(u,_,_,_,_)| u),
+                free_bytes_previous_day:      cur_day.map(|(_,f,_,_,_)| f),
+                total_bytes_previous_day:     cur_day.map(|(_,_,t,_,_)| t),
+                percent_used_previous_day:    cur_day.map(|(_,_,_,p,_)| p),
+                time_added_previous_day:      cur_day.map(|(_,_,_,_,ta)| ta),
+
+                used_bytes_previous_week:     cur_week.map(|(u,_,_,_,_)| u),
+                free_bytes_previous_week:     cur_week.map(|(_,f,_,_,_)| f),
+                total_bytes_previous_week:    cur_week.map(|(_,_,t,_,_)| t),
+                percent_used_previous_week:   cur_week.map(|(_,_,_,p,_)| p),
+                time_added_previous_week:     cur_week.map(|(_,_,_,_,ta)| ta),
+
+                used_bytes_previous_month:    cur_mon.map(|(u,_,_,_,_)| u),
+                free_bytes_previous_month:    cur_mon.map(|(_,f,_,_,_)| f),
+                total_bytes_previous_month:   cur_mon.map(|(_,_,t,_,_)| t),
+                percent_used_previous_month:  cur_mon.map(|(_,_,_,p,_)| p),
+                time_added_previous_month:    cur_mon.map(|(_,_,_,_,ta)| ta),
+            });
+        }
+    }
+
+    tracing::info!("Returned enriched storage stats to {}", addr);
     Ok((StatusCode::OK, Json(results)))
 }
 

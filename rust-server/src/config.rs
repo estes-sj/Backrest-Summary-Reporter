@@ -61,18 +61,27 @@ impl Config {
         let email_from = env::var("EMAIL_FROM").ok();
         let email_to = env::var("EMAIL_TO").ok();
 
-        
-        // optional storage mounts
+        // Optional storage mounts
         let mut storage_mounts = Vec::new();
         for idx in 1.. {
             let key_path = format!("STORAGE_PATH_{}", idx);
-            let path = match env::var(&key_path).ok().filter(|s| !s.is_empty()) {
-                Some(p) => p,
-                None => break,
-            };
-            let key_nick = format!("STORAGE_NICK_{}", idx);
-            let nickname = env::var(&key_nick).ok().filter(|s| !s.is_empty());
-            storage_mounts.push(StorageConfig { path, nickname });
+            match env::var(&key_path) {
+                Ok(path) if path.trim().is_empty() => {
+                    // Variable is set but empty: warn and stop processing further mounts
+                    tracing::warn!("{} is set but empty, stopping storage mount configuration. Ensure the specified path is properly mounted.", key_path);
+                    break;
+                }
+                Ok(path) => {
+                    // Valid path
+                    let key_nick = format!("STORAGE_NICK_{}", idx);
+                    let nickname = env::var(&key_nick).ok().filter(|s| !s.is_empty());
+                    storage_mounts.push(StorageConfig { path, nickname });
+                }
+                Err(_) => {
+                    // No more STORAGE_PATH_N defined, stop
+                    break;
+                }
+            }
         }
 
         Ok(Config {

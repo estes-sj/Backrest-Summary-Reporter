@@ -103,15 +103,34 @@ pub struct StorageReport {
 pub struct CurrentStorageStats {
     pub location:     String,
     pub nickname:     Option<String>,
+
     pub used_bytes:   i64,
     pub free_bytes:   i64,
     pub total_bytes:  i64,
     pub percent_used: f64,
     pub time_added:   DateTime<Utc>,
+    
+    pub used_bytes_previous_day:      Option<i64>,
+    pub free_bytes_previous_day:      Option<i64>,
+    pub total_bytes_previous_day:     Option<i64>,
+    pub percent_used_previous_day:    Option<f64>,
+    pub time_added_previous_day:      Option<DateTime<Utc>>,
+
+    pub used_bytes_previous_week:     Option<i64>,
+    pub free_bytes_previous_week:     Option<i64>,
+    pub total_bytes_previous_week:    Option<i64>,
+    pub percent_used_previous_week:   Option<f64>,
+    pub time_added_previous_week:     Option<DateTime<Utc>>,
+
+    pub used_bytes_previous_month:    Option<i64>,
+    pub free_bytes_previous_month:    Option<i64>,
+    pub total_bytes_previous_month:   Option<i64>,
+    pub percent_used_previous_month:  Option<f64>,
+    pub time_added_previous_month:    Option<DateTime<Utc>>,
 }
 
 /// Structure matching exactly the columns pulled from the DB
-#[derive(FromRow)]
+#[derive(Clone, FromRow)]
 pub struct DbStorageRow {
     pub storage_location:    String,
     pub storage_nickname:    Option<String>,
