@@ -15,7 +15,7 @@ use lettre::{
 };
 use crate::{
     config::{Config,StorageConfig},
-    models::{CombinedStats, CurrentStorageStats, DbStorageRow, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
+    models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
 ///
@@ -66,6 +66,24 @@ pub async fn get_events_in_range_handler(
 
     // 3) Return the formatted JSON
     Ok((StatusCode::OK, Json(rows)))
+}
+
+/// POST `/get-events-in-range-totals` endpoint.
+/// Takes in a start_date and end_date, returns the queried data between the provided times
+pub async fn get_events_in_range_totals_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State((pool, cfg)): State<(PgPool, Config)>,
+    headers: HeaderMap,
+    Json(req): Json<StatsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    // 1) Auth
+    validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
+
+    // 2) Fetch the aggregated totals
+    let totals = fetch_event_totals(&pool, req.start_date, req.end_date).await?;
+
+    // 3) Return JSON
+    Ok((StatusCode::OK, Json(totals)))
 }
 
 /// GET `/send-test-email` endpoint.
@@ -175,7 +193,8 @@ pub async fn get_latest_storage_stats_handler(
 }
 
 /// POST `/get-events-and-storage-stats` endpoint.
-/// Takes in a start_date and end_date, returns the queried data between the provided times,
+/// Takes in a start_date and end_date, returns the event totals between the provided times,
+/// the queried data between the provided times,
 /// updates the configured storage mounts with the latest statistics, 
 /// and retrieves the latest storage statistics and its previous day, week, and month.
 pub async fn get_events_and_storage_stats_handler(
@@ -187,17 +206,21 @@ pub async fn get_events_and_storage_stats_handler(
     // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // 2) Delegate to helper to fetch the combined stats between the request start and end date
+    // 2) Fetch the combined event totals
+    let event_totals = fetch_event_totals(&pool, req.start_date, req.end_date).await?;
+
+    // 3) Delegate to helper to fetch the combined stats between the request start and end date
     let snapshot_summaries = fetch_combined_stats(&pool, req.start_date, req.end_date).await?;
 
-    // 3) Trigger an update to update the storage statistics
+    // 4) Trigger an update to update the storage statistics
     load_and_insert_storage_stats(&pool, &cfg.storage_mounts).await?;
-
-    // 4) Get latest storage statistics
+    
+    // 5) Get latest storage statistics
     let storage_statistics = load_storage_stats(&pool, &cfg.storage_mounts).await?;
     
-    // 5) Return the combined report
+    // 6) Return the combined report
     let payload = GenerateReport {
+        event_totals,
         snapshot_summaries,
         storage_statistics,
     };
@@ -328,8 +351,8 @@ pub fn validate_api_key_with_ip(
 /// Fetches all `CombinedStats` between two instants, or returns a `(StatusCode, &str)` error.
 pub async fn fetch_combined_stats(
     pool: &PgPool,
-    start: DateTime<chrono::Utc>,
-    end: DateTime<chrono::Utc>,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
 ) -> Result<Vec<CombinedStats>, (StatusCode, &'static str)> {
     sqlx::query_as::<_, CombinedStats>(r#"
         SELECT
@@ -377,6 +400,54 @@ pub async fn fetch_combined_stats(
         tracing::error!("DB query error in fetch_combined_stats: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, "db error")
     })
+}
+
+/// Fetches all of the aggregated counters between `start` and `end`.
+pub async fn fetch_event_totals(
+    pool: &PgPool,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> Result<EventTotals, (StatusCode, &'static str)> {
+    // We LEFT JOIN snapshot_stats so that events without stats still count.
+    let row: EventTotals = sqlx::query_as::<_, EventTotals>(
+        r#"
+        SELECT
+          COALESCE(COUNT(*)                                                           , 0)::BIGINT AS total_events,
+          COALESCE(SUM(CASE WHEN s.event ILIKE '%snapshot success%' THEN 1 ELSE 0 END), 0)::BIGINT AS total_snapshot_success,
+          COALESCE(SUM(CASE WHEN s.event ILIKE '%snapshot error%'   THEN 1 ELSE 0 END), 0)::BIGINT AS total_snapshot_error,
+          COALESCE(SUM(CASE WHEN s.event ILIKE '%forget success%'   THEN 1 ELSE 0 END), 0)::BIGINT AS total_forget_success,
+          COALESCE(SUM(CASE WHEN s.event ILIKE '%forget error%'     THEN 1 ELSE 0 END), 0)::BIGINT AS total_forget_error,
+    
+          COALESCE(SUM(ss.files_new)       , 0)::BIGINT AS total_files_new,
+          COALESCE(SUM(ss.files_changed)   , 0)::BIGINT AS total_files_changed,
+          COALESCE(SUM(ss.files_unmodified), 0)::BIGINT AS total_files_unmodified,
+
+          COALESCE(SUM(ss.dirs_new)       , 0)::BIGINT AS total_dirs_new,
+          COALESCE(SUM(ss.dirs_changed)   , 0)::BIGINT AS total_dirs_changed,
+          COALESCE(SUM(ss.dirs_unmodified), 0)::BIGINT AS total_dirs_unmodified,
+
+          COALESCE(SUM(ss.data_blobs)            , 0)::BIGINT AS total_data_blobs,
+          COALESCE(SUM(ss.tree_blobs)            , 0)::BIGINT AS total_tree_blobs,
+          COALESCE(SUM(ss.data_added)            , 0)::BIGINT AS total_data_added,
+          COALESCE(SUM(ss.total_files_processed) , 0)::BIGINT AS total_files_processed,
+          COALESCE(SUM(ss.total_bytes_processed) , 0)::BIGINT AS total_bytes_processed,
+          COALESCE(SUM(ss.total_duration)        , 0)::BIGINT AS total_duration
+    
+        FROM summaries s
+        LEFT JOIN snapshot_stats ss ON ss.summary_id = s.id
+        WHERE s.time BETWEEN $1 AND $2
+        "#
+    )
+    .bind(start)
+    .bind(end)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("DB aggregation error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+    })?;
+
+    Ok(row)
 }
 
 /// Stats all mounts, inserts into the DB, and returns the summaries.
