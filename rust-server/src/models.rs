@@ -120,6 +120,13 @@ pub struct CurrentStorageStats {
     pub previous_month: Option<PeriodStats>,
 }
 
+/// Combined report of summary statistics and current storage stats
+#[derive(Serialize)]
+pub struct GenerateReport {
+    pub snapshot_summaries: Vec<CombinedStats>,
+    pub storage_statistics: Vec<CurrentStorageStats>,
+}
+
 /// Structure matching exactly the columns pulled from the DB
 #[derive(Clone, FromRow)]
 pub struct DbStorageRow {

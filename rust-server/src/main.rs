@@ -12,7 +12,14 @@ use axum::{
 };
 use config::Config;
 use db::init_db;
-use handlers::{get_stats_handler, summary_handler, test_email_handler, storage_stats_handler, get_current_storage_stats_handler};
+use handlers::{
+    add_event_handler,
+    get_events_and_storage_stats_handler,
+    get_events_in_range_handler,
+    get_latest_storage_stats_handler,
+    send_test_email_handler,
+    update_storage_statistics_handler,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,11 +41,12 @@ async fn main() -> anyhow::Result<()> {
 
     // now move cfg into the router
     let app = Router::new()
-        .route("/summary", post(summary_handler))
-        .route("/get_stats", post(get_stats_handler))
-        .route("/test_email", get(test_email_handler))
-        .route("/storage_stats", post(storage_stats_handler))
-        .route("/current_storage_stats", get(get_current_storage_stats_handler))
+        .route("/add-event", post(add_event_handler))
+        .route("/get-events-and-storage-stats", post(get_events_and_storage_stats_handler))
+        .route("/get-events-in-range", post(get_events_in_range_handler))
+        .route("/get-latest-storage-stats", get(get_latest_storage_stats_handler))
+        .route("/send-test-email", get(send_test_email_handler))
+        .route("/update-storage-statistics", get(update_storage_statistics_handler))
         .with_state((pool, cfg));
 
     // serve

@@ -5,7 +5,7 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Local, Utc};
 use fs2::{free_space, total_space};
-use std::{collections::HashMap, fs, net::SocketAddr, path::Path};
+use std::{fs, net::SocketAddr, path::Path};
 use sqlx::{PgPool, Row};
 use lettre::{
     AsyncTransport,
@@ -15,226 +15,67 @@ use lettre::{
 };
 use crate::{
     config::{Config,StorageConfig},
-    models::{CombinedStats, CurrentStorageStats, DbStorageRow, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
+    models::{CombinedStats, CurrentStorageStats, DbStorageRow, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
-/// HTTP handler for `/summary` endpoint.
-/// Validates API key, inserts summary and snapshot_stats into the database.
-pub async fn summary_handler(
+///
+/// HANDLER METHODS
+/// 
+
+/// POST `/add-event` endpoint.
+/// Inserts snapshot summary and statistics into the database.
+pub async fn add_event_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
     Json(payload): Json<SummaryPayload>,
 ) -> impl IntoResponse {
-
-    // Validate API Key
+    // 1) Auth
     if let Err(e) = validate_api_key_with_ip(&headers, &cfg.auth_key, addr) {
         return e;
     }
 
-    // Determine created_at timestamp in server's local timezone
-    let created_at = Local::now().with_timezone(&Utc); // Use DateTime<Utc> for SQL compatibility
-
-    // Insert into summaries, returning id and created_at
-    let row = sqlx::query(
-        "INSERT INTO summaries (created_at, task, time, event, repo, plan, snapshot, error)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, created_at"
-    )
-    .bind(&created_at)
-    .bind(&payload.task)
-    .bind(&payload.time)
-    .bind(&payload.event)
-    .bind(&payload.repo)
-    .bind(&payload.plan)
-    .bind(&payload.snapshot)
-    .bind(&payload.error)
-    .fetch_one(&pool)
-    .await;
-
-    let (summary_id, created): (i32, DateTime<Utc>) = match row {
-        Ok(r) => (r.get("id"), r.get("created_at")),
-        Err(e) => {
-            eprintln!("DB insert summary error: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "db error");
-        }
-    };
-
-    // Insert snapshot_stats if present
-    if let Some(stats) = payload.snapshot_stats {
-        if let Err(e) = sqlx::query(
-            r#"
-            INSERT INTO snapshot_stats (
-                -- General information
+    // 2) Delegate to helper
+    match insert_summary_with_stats(&pool, &payload).await {
+        Ok((summary_id, created)) => {
+            tracing::info!(
+                "Event with ID {} at {} from {}",
                 summary_id,
-                message_type,
-                error,
-                during,
-                item,
-    
-                -- File stats
-                files_new,
-                files_changed,
-                files_unmodified,
-    
-                -- Directory stats
-                dirs_new,
-                dirs_changed,
-                dirs_unmodified,
-    
-                -- Blob stats
-                data_blobs,
-                tree_blobs,
-                data_added,
-    
-                -- Processing stats
-                total_files_processed,
-                total_bytes_processed,
-                total_duration,
-    
-                -- Snapshot info
-                snapshot_id,
-                percent_done,
-    
-                -- Progress info
-                total_files,
-                files_done,
-                total_bytes,
-                bytes_done,
-                current_files
-            ) VALUES (
-                $1, $2, $3, $4, $5,      -- General information
-                $6, $7, $8,              -- File stats
-                $9, $10, $11,            -- Directory stats
-                $12, $13, $14,           -- Blob stats
-                $15, $16, $17,           -- Processing stats
-                $18, $19,                -- Snapshot info
-                $20, $21, $22, $23, $24  -- Progress info
-            )
-            "#
-        )
-        .bind(summary_id)
-        .bind(&stats.message_type)
-        .bind(&stats.error)
-        .bind(&stats.during)
-        .bind(&stats.item)
-        .bind(stats.files_new)
-        .bind(stats.files_changed)
-        .bind(stats.files_unmodified)
-        .bind(stats.dirs_new)
-        .bind(stats.dirs_changed)
-        .bind(stats.dirs_unmodified)
-        .bind(stats.data_blobs)
-        .bind(stats.tree_blobs)
-        .bind(stats.data_added)
-        .bind(stats.total_files_processed)
-        .bind(stats.total_bytes_processed)
-        .bind(stats.total_duration)
-        .bind(&stats.snapshot_id)
-        .bind(stats.percent_done)
-        .bind(stats.total_files)
-        .bind(stats.files_done)
-        .bind(stats.total_bytes)
-        .bind(stats.bytes_done)
-        .bind(stats.current_files)
-        .execute(&pool)
-        .await
-        {
-            eprintln!("DB insert stats error: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "db error");
+                created.to_rfc3339(),
+                addr
+            );
+            (StatusCode::OK, "ok")
         }
+        Err(err) => err,
     }
-
-    tracing::info!("Event with ID {} at {} from {}", summary_id, created.to_rfc3339(), addr);
-    (StatusCode::OK, "ok")
 }
 
-/// HTTP handler for `/get_stats` endpoint.
-/// Validates API key, takes in a start_date and end_date, returns the queried data between the provided times
-pub async fn get_stats_handler(
+/// POST `/get-events-in-range` endpoint.
+/// Takes in a start_date and end_date, returns the queried data between the provided times
+pub async fn get_events_in_range_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
     Json(req): Json<StatsRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-
-    // Validate API Key
+    // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // Dynamic query_as, mapping into CombinedStats (FromRow)
-    let rows: Vec<CombinedStats> = sqlx::query_as::<_, CombinedStats>(
-        r#"
-        SELECT
-            -- Summary fields
-            s.id AS summary_id,
-            s.created_at,
-            s.task,
-            s.time,
-            s.event,
-            s.repo,
-            s.plan,
-            s.snapshot,
-            s.error,
-    
-            -- Snapshot stats fields
-            ss.message_type,
-            ss.error AS ss_error,
-            ss.during,
-            ss.item,
-    
-            -- File stats
-            ss.files_new,
-            ss.files_changed,
-            ss.files_unmodified,
-    
-            -- Directory stats
-            ss.dirs_new,
-            ss.dirs_changed,
-            ss.dirs_unmodified,
-    
-            -- Blob stats
-            ss.data_blobs,
-            ss.tree_blobs,
-            ss.data_added,
-    
-            -- Processing stats
-            ss.total_files_processed,
-            ss.total_bytes_processed,
-            ss.total_duration,
-            ss.snapshot_id AS ss_snapshot,
-    
-            -- Progress
-            ss.percent_done,
-            ss.total_files,
-            ss.files_done,
-            ss.total_bytes,
-            ss.bytes_done,
-            ss.current_files
-    
-        FROM summaries s
-        LEFT JOIN snapshot_stats ss ON ss.summary_id = s.id
-        WHERE s.time BETWEEN $1 AND $2
-        "#
-    )    
-    .bind(req.start_date)
-    .bind(req.end_date)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| {
-        eprintln!("DB query error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
-    })?;
+    // 2) Delegate to helper to fetch the combined stats between the request start and end date
+    let rows = fetch_combined_stats(&pool, req.start_date, req.end_date).await?;
 
+    // 3) Return the formatted JSON
     Ok((StatusCode::OK, Json(rows)))
 }
 
-/// GET /test_email
-pub async fn test_email_handler(
+/// GET `/send-test-email` endpoint.
+/// Send a test email using the configured SMTP settings.
+pub async fn send_test_email_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State((_, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    // 1) API key + IP check
+    // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
     // 2) Ensure we have all SMTP settings
@@ -298,188 +139,170 @@ pub async fn test_email_handler(
         })
 }
 
-/// POST /storage_stats
-pub async fn storage_stats_handler(
+/// GET `/update-storage-statistics` endpoint.
+/// Updates the configured storage mounts with the latest statistics.
+pub async fn update_storage_statistics_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-
-    // 1) API key + IP check
+    // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // 2) Gather stats and insert
-    let mut reports = Vec::new();
+    // 2) Delegate insertion & report generation
+    let reports = load_and_insert_storage_stats(&pool, &cfg.storage_mounts).await?;
 
-    for mount in &cfg.storage_mounts {
-        let path = &mount.path;
-        let nickname = mount.nickname.clone();
-
-        let total_bytes = total_space(path).map_err(|e| {
-            tracing::error!("stat total {} failed: {}", path, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
-        })?;
-        let free_bytes = free_space(path).map_err(|e| {
-            tracing::error!("stat free {} failed: {}", path, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
-        })?;
-        let used_bytes = total_bytes.saturating_sub(free_bytes);
-
-        // 3) Insert into DB
-        sqlx::query(
-            r#"
-            INSERT INTO storage (
-              storage_location,
-              storage_nickname,
-              storage_used_bytes,
-              storage_total_bytes
-            ) VALUES ($1, $2, $3, $4)
-            "#
-        )
-        .bind(path)
-        .bind(&nickname)
-        .bind(used_bytes as i64)
-        .bind(total_bytes as i64)
-        .execute(&pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("DB insert {} failed: {}", path, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "db error")
-        })?;
-
-        reports.push(StorageReport {
-            location: path.clone(),
-            nickname,
-            used_bytes: used_bytes,
-            total_bytes: total_bytes,
-        });
-    }
-
-    // 4) Return JSON summary
+    // 3) Log & return
     tracing::info!("Storage statistics updated from {}.", addr);
     Ok((StatusCode::OK, Json(reports)))
 }
 
-// GET /current_storage_stats
-pub async fn get_current_storage_stats_handler(
+/// GET `/get-latest-storage-stats` endpoint.
+/// Retrieves the latest storage statistics and its previous day, week, and month.
+pub async fn get_latest_storage_stats_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    // 1) API key + IP check
+    // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // 2) Map configured mounts
-    let mount_map: HashMap<String, Option<String>> =
-        cfg.storage_mounts.iter()
-            .map(|m| (m.path.clone(), m.nickname.clone()))
-            .collect();
+    // 2) Delegate to our new helper
+    let stats = load_storage_stats(&pool, &cfg.storage_mounts).await?;
 
-    // 3) Fetch latest per mount
-    let current_rows: Vec<DbStorageRow> = sqlx::query_as(
-        r#"
-        SELECT DISTINCT ON (storage_location)
-            storage_location,
-            storage_nickname,
-            storage_used_bytes,
-            storage_total_bytes,
-            time_added
-        FROM storage
-        ORDER BY storage_location, time_added DESC
-        "#,
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| {
-        tracing::error!("DB query error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
-    })?;
-
-    // Helper to fetch prior row
-    async fn fetch_prior(
-        pool: &PgPool,
-        path: &str,
-        cutoff: DateTime<Utc>,
-    ) -> Result<Option<DbStorageRow>, sqlx::Error> {
-        sqlx::query_as(
-            r#"
-            SELECT storage_location, storage_nickname, storage_used_bytes,
-                   storage_total_bytes, time_added
-            FROM storage
-            WHERE storage_location = $1
-              AND time_added <= $2
-            ORDER BY time_added DESC
-            LIMIT 1
-            "#,
-        )
-        .bind(path)
-        .bind(cutoff)
-        .fetch_optional(pool)
-        .await
-    }
-
-    // 4) Build response
-    let mut results = Vec::with_capacity(cfg.storage_mounts.len());
-    for StorageConfig { path, .. } in &cfg.storage_mounts {
-        if let Some(cur) = current_rows.iter().find(|r| &r.storage_location == path) {
-            // pack a PeriodStats
-            let make_period = |row: &DbStorageRow| PeriodStats {
-                used_bytes: row.storage_used_bytes,
-                free_bytes: row.storage_total_bytes.saturating_sub(row.storage_used_bytes),
-                total_bytes: row.storage_total_bytes,
-                percent_used: if row.storage_total_bytes > 0 {
-                    (row.storage_used_bytes as f64 / row.storage_total_bytes as f64) * 100.0
-                } else { 0.0 },
-                time_added: row.time_added,
-            };
-
-            let current = make_period(cur);
-            // cutoffs
-            let t = cur.time_added;
-            let d_cut = t - Duration::days(1);
-            let w_cut = t - Duration::weeks(1);
-            let m_cut = t - Duration::days(30);
-
-            // fetch periods
-            let d_row = fetch_prior(&pool, path, d_cut).await.map_err(|e| {
-                tracing::error!("DB fetch prior day for {}: {}", path, e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "db error")
-            })?;
-            let w_row = fetch_prior(&pool, path, w_cut).await.map_err(|e| {
-                tracing::error!("DB fetch prior week for {}: {}", path, e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "db error")
-            })?;
-            let m_row = fetch_prior(&pool, path, m_cut).await.map_err(|e| {
-                tracing::error!("DB fetch prior month for {}: {}", path, e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "db error")
-            })?;
-
-            let previous_day   = d_row.as_ref().map(|r| make_period(r));
-            let previous_week  = w_row.as_ref().map(|r| make_period(r));
-            let previous_month = m_row.as_ref().map(|r| make_period(r));
-
-            let nickname = mount_map.get(path).cloned().unwrap_or(cur.storage_nickname.clone());
-
-            results.push(CurrentStorageStats {
-                location: path.clone(),
-                nickname,
-                current,
-                previous_day,
-                previous_week,
-                previous_month,
-            });
-        }
-    }
-
-    tracing::info!("Returned grouped storage stats to {}", addr);
-    Ok((StatusCode::OK, Json(results)))
+    // 3) Return JSON
+    Ok((StatusCode::OK, Json(stats)))
 }
 
-/// TODO: Move to utils class
+/// POST `/get-events-and-storage-stats` endpoint.
+/// Takes in a start_date and end_date, returns the queried data between the provided times,
+/// updates the configured storage mounts with the latest statistics, 
+/// and retrieves the latest storage statistics and its previous day, week, and month.
+pub async fn get_events_and_storage_stats_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State((pool, cfg)): State<(PgPool, Config)>,
+    headers: HeaderMap,
+    Json(req): Json<StatsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    // 1) Auth
+    validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
+
+    // 2) Delegate to helper to fetch the combined stats between the request start and end date
+    let snapshot_summaries = fetch_combined_stats(&pool, req.start_date, req.end_date).await?;
+
+    // 3) Trigger an update to update the storage statistics
+    load_and_insert_storage_stats(&pool, &cfg.storage_mounts).await?;
+
+    // 4) Get latest storage statistics
+    let storage_statistics = load_storage_stats(&pool, &cfg.storage_mounts).await?;
+    
+    // 5) Return the combined report
+    let payload = GenerateReport {
+        snapshot_summaries,
+        storage_statistics,
+    };
+    Ok((StatusCode::OK, Json(payload)))
+}
+
 ///
 /// HELPER METHODS
 /// 
 
+/// Inserts a new summary (and optional snapshot_stats), returning `(id, created_at)`.
+pub async fn insert_summary_with_stats(
+    pool: &PgPool,
+    payload: &SummaryPayload,
+) -> Result<(i32, DateTime<Utc>), (StatusCode, &'static str)> {
+    // 1) Determine created_at in UTC
+    let created_at = Local::now().with_timezone(&Utc);
+
+    // 2) Insert into summaries dynamically
+    let row = sqlx::query(
+        r#"
+        INSERT INTO summaries (
+          created_at, task, time, event, repo, plan, snapshot, error
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, created_at
+        "#
+    )
+    .bind(created_at)
+    .bind(&payload.task)
+    .bind(&payload.time)
+    .bind(&payload.event)
+    .bind(&payload.repo)
+    .bind(&payload.plan)
+    .bind(&payload.snapshot)
+    .bind(&payload.error)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("DB insert summary error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+    })?;
+
+    // Extract with dynamic get
+    let summary_id: i32 = row.get("id");
+    let created: DateTime<Utc> = row.get("created_at");
+
+    // 3) Insert snapshot_stats if present
+    if let Some(stats) = &payload.snapshot_stats {
+        sqlx::query(
+            r#"
+            INSERT INTO snapshot_stats (
+                summary_id, message_type, error, during, item,
+                files_new, files_changed, files_unmodified,
+                dirs_new, dirs_changed, dirs_unmodified,
+                data_blobs, tree_blobs, data_added,
+                total_files_processed, total_bytes_processed, total_duration,
+                snapshot_id, percent_done,
+                total_files, files_done, total_bytes, bytes_done, current_files
+            ) VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8,
+                $9, $10, $11,
+                $12, $13, $14,
+                $15, $16, $17,
+                $18, $19,
+                $20, $21, $22, $23, $24
+            )
+            "#
+        )
+        .bind(summary_id)
+        .bind(&stats.message_type)
+        .bind(&stats.error)
+        .bind(&stats.during)
+        .bind(&stats.item)
+        .bind(stats.files_new)
+        .bind(stats.files_changed)
+        .bind(stats.files_unmodified)
+        .bind(stats.dirs_new)
+        .bind(stats.dirs_changed)
+        .bind(stats.dirs_unmodified)
+        .bind(stats.data_blobs)
+        .bind(stats.tree_blobs)
+        .bind(stats.data_added)
+        .bind(stats.total_files_processed)
+        .bind(stats.total_bytes_processed)
+        .bind(stats.total_duration)
+        .bind(&stats.snapshot_id)
+        .bind(stats.percent_done)
+        .bind(stats.total_files)
+        .bind(stats.files_done)
+        .bind(stats.total_bytes)
+        .bind(stats.bytes_done)
+        .bind(stats.current_files)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("DB insert snapshot_stats error: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+        })?;
+    }
+
+    Ok((summary_id, created))
+}
+
+/// Validates the API key provided in the headers.
 pub fn validate_api_key_with_ip(
     headers: &HeaderMap,
     expected_key: &str,
@@ -500,4 +323,221 @@ pub fn validate_api_key_with_ip(
     }
 
     Ok(())
+}
+
+/// Fetches all `CombinedStats` between two instants, or returns a `(StatusCode, &str)` error.
+pub async fn fetch_combined_stats(
+    pool: &PgPool,
+    start: DateTime<chrono::Utc>,
+    end: DateTime<chrono::Utc>,
+) -> Result<Vec<CombinedStats>, (StatusCode, &'static str)> {
+    sqlx::query_as::<_, CombinedStats>(r#"
+        SELECT
+            s.id             AS summary_id,
+            s.created_at,
+            s.task, s.time, s.event, s.repo, s.plan, s.snapshot, s.error,
+
+            ss.message_type,
+            ss.error         AS ss_error,
+            ss.during,
+            ss.item,
+
+            ss.files_new,
+            ss.files_changed,
+            ss.files_unmodified,
+
+            ss.dirs_new,
+            ss.dirs_changed,
+            ss.dirs_unmodified,
+
+            ss.data_blobs,
+            ss.tree_blobs,
+            ss.data_added,
+
+            ss.total_files_processed,
+            ss.total_bytes_processed,
+            ss.total_duration,
+            ss.snapshot_id   AS ss_snapshot,
+
+            ss.percent_done,
+            ss.total_files,
+            ss.files_done,
+            ss.total_bytes,
+            ss.bytes_done,
+            ss.current_files
+        FROM summaries s
+        LEFT JOIN snapshot_stats ss ON ss.summary_id = s.id
+        WHERE s.time BETWEEN $1 AND $2
+    "#)
+    .bind(start)
+    .bind(end)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("DB query error in fetch_combined_stats: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+    })
+}
+
+/// Stats all mounts, inserts into the DB, and returns the summaries.
+pub async fn load_and_insert_storage_stats(
+    pool: &PgPool,
+    mounts: &[StorageConfig],
+) -> Result<Vec<StorageReport>, (StatusCode, &'static str)> {
+    let mut reports = Vec::with_capacity(mounts.len());
+
+    for mount in mounts {
+        let path = &mount.path;
+        let nickname = mount.nickname.clone();
+
+        // filesystem stats
+        let total_bytes = total_space(path).map_err(|e| {
+            tracing::error!("stat total {} failed: {}", path, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
+        })?;
+        let free_bytes = free_space(path).map_err(|e| {
+            tracing::error!("stat free {} failed: {}", path, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
+        })?;
+        let used_bytes = total_bytes.saturating_sub(free_bytes);
+
+        // insert
+        sqlx::query(
+            r#"
+            INSERT INTO storage (
+                storage_location,
+                storage_nickname,
+                storage_used_bytes,
+                storage_total_bytes
+            ) VALUES ($1, $2, $3, $4)
+            "#,
+        )
+        .bind(path)
+        .bind(&nickname)
+        .bind(used_bytes as i64)
+        .bind(total_bytes as i64)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("DB insert {} failed: {}", path, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+        })?;
+
+        reports.push(StorageReport {
+            location:   path.clone(),
+            nickname,
+            used_bytes,
+            total_bytes,
+        });
+    }
+
+    Ok(reports)
+}
+
+/// Fetches *all* current + prior (day/week/month) stats for the given mounts.
+pub async fn load_storage_stats(
+    pool: &PgPool,
+    mounts: &[StorageConfig],
+) -> Result<Vec<CurrentStorageStats>, (StatusCode, &'static str)> {
+    // 1) Grab the latest row for each mount
+    let current_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
+        r#"
+        SELECT DISTINCT ON (storage_location)
+            storage_location,
+            storage_nickname,
+            storage_used_bytes,
+            storage_total_bytes,
+            time_added
+        FROM storage
+        ORDER BY storage_location, time_added DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("DB query error for current storage: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+    })?;
+
+    // 2) Prepare a helper for fetching the most recent before a cutoff
+    async fn fetch_prior(
+        pool: &PgPool,
+        path: &str,
+        cutoff: DateTime<Utc>,
+    ) -> Result<Option<DbStorageRow>, sqlx::Error> {
+        sqlx::query_as::<_, DbStorageRow>(
+            r#"
+            SELECT
+                storage_location,
+                storage_nickname,
+                storage_used_bytes,
+                storage_total_bytes,
+                time_added
+            FROM storage
+            WHERE storage_location = $1
+              AND time_added <= $2
+            ORDER BY time_added DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(path)
+        .bind(cutoff)
+        .fetch_optional(pool)
+        .await
+    }
+
+    // 3) Build the response vector
+    let mut out = Vec::with_capacity(mounts.len());
+    for mount in mounts {
+        if let Some(cur) = current_rows.iter().find(|r| &r.storage_location == &mount.path) {
+            // pack current
+            let make_period = |r: &DbStorageRow| PeriodStats {
+                used_bytes:   r.storage_used_bytes,
+                free_bytes:   r.storage_total_bytes.saturating_sub(r.storage_used_bytes),
+                total_bytes:  r.storage_total_bytes,
+                percent_used: if r.storage_total_bytes > 0 {
+                    (r.storage_used_bytes as f64 / r.storage_total_bytes as f64) * 100.0
+                } else { 0.0 },
+                time_added:   r.time_added,
+            };
+            let current = make_period(cur);
+
+            // compute cutoffs
+            let t = cur.time_added;
+            let cuts = [
+                ("day",   t - Duration::days(1)),
+                ("week",  t - Duration::weeks(1)),
+                ("month", t - Duration::days(30)),
+            ];
+
+            // fetch priors
+            let mut priors = [None, None, None];
+            for (i, &(_, cutoff)) in cuts.iter().enumerate() {
+                priors[i] = fetch_prior(pool, &mount.path, cutoff)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("DB fetch prior for {} cutoff {:?}: {}", mount.path, cutoff, e);
+                        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+                    })?;
+            }
+
+            let previous_day   = priors[0].as_ref().map(|r| make_period(r));
+            let previous_week  = priors[1].as_ref().map(|r| make_period(r));
+            let previous_month = priors[2].as_ref().map(|r| make_period(r));
+
+            // use config nickname preferentially
+            let nickname = mount.nickname.clone().or(cur.storage_nickname.clone());
+
+            out.push(CurrentStorageStats {
+                location:       mount.path.clone(),
+                nickname,
+                current,
+                previous_day,
+                previous_week,
+                previous_month,
+            });
+        }
+    }
+
+    Ok(out)
 }
