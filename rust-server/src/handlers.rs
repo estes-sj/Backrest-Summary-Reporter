@@ -15,6 +15,7 @@ use lettre::{
 };
 use crate::{
     config::{Config,StorageConfig},
+    email::{EmailClient},
     models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
@@ -97,64 +98,20 @@ pub async fn send_test_email_handler(
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
     // 2) Ensure we have all SMTP settings
-    let host = cfg.smtp_host.as_deref().ok_or_else(|| {
-        tracing::error!("SMTP_HOST not configured");
-        (StatusCode::INTERNAL_SERVER_ERROR, "SMTP not configured")
-    })?;
-    let username = cfg.smtp_username.as_deref().unwrap_or_default();
-    let password = cfg.smtp_password.as_deref().unwrap_or_default();
-    let from = cfg.email_from.as_deref().ok_or_else(|| {
-        tracing::error!("EMAIL_FROM not configured");
-        (StatusCode::INTERNAL_SERVER_ERROR, "SMTP not configured")
-    })?;
-    let to = cfg.email_to.as_deref().ok_or_else(|| {
-        tracing::error!("EMAIL_TO not configured");
-        (StatusCode::INTERNAL_SERVER_ERROR, "SMTP not configured")
-    })?;
+    let client = EmailClient::from_config(&cfg)?;
 
     // 3) Read the test email HTML
-    let html_path = Path::new("html/test_email.html");
-
-    let mut html = fs::read_to_string(&html_path)
-    .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to read HTML file"))?;
+    let mut html = fs::read_to_string("html/test_email.html")
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read HTML file"))?;
 
     // 4) Modify the timestamp
     let timestamp = Local::now().format("%d/%m/%Y at %I:%M %p").to_string();
     html = html.replace("{{TIMESTAMP}}", &timestamp);
 
-    // 5) Build the email
-    let email = Message::builder()
-        .from(from.parse().expect("valid EMAIL_FROM"))
-        .to(to.parse().expect("valid EMAIL_TO"))
-        .header(ContentType::TEXT_HTML)
-        .subject("🚀 Test Email")
-        .body(html)
-        .map_err(|e| {
-            tracing::error!("Failed to build email: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Email build error")
-        })?;
+    // 5) Build the email and send
+    client.send_html("🚀 Test Email", html).await?;
 
-    // 6) Configure & send
-    let creds = Credentials::new(username.into(), password.into());
-    let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(host)
-        .map_err(|e| {
-            tracing::error!("SMTP relay config failed: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "SMTP config error")
-        })?
-        .credentials(creds)
-        .build();
-
-    mailer
-        .send(email)
-        .await
-        .map(|_| {
-            tracing::info!("Test email successfully sent to {}", to);
-            (StatusCode::OK, "Test email sent")
-        })
-        .map_err(|e| {
-            tracing::error!("Failed to send email: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send email")
-        })
+    Ok((StatusCode::OK, "Test email sent"))
 }
 
 /// GET `/update-storage-statistics` endpoint.
