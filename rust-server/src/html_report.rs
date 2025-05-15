@@ -100,6 +100,36 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     replacements.push(("{{PERCENT_TOTAL_FILES_UNMODIFIED_PREVIOUS_WEEK}}", get_files_unmodified_change_pct(cur_unmod, &report.event_totals.previous_week)));
     replacements.push(("{{TOTAL_FILES_UNMODIFIED_PREVIOUS_MONTH}}", get_formatted_files_unmodified(&report.event_totals.previous_month)));
     replacements.push(("{{PERCENT_TOTAL_FILES_UNMODIFIED_PREVIOUS_MONTH}}", get_files_unmodified_change_pct(cur_unmod, &report.event_totals.previous_month)));
+
+    // Dirs new
+    let cur_new = et.total_dirs_new;
+    replacements.push(("{{TOTAL_DIRS_NEW}}", cur_new.to_string()));
+    replacements.push(("{{TOTAL_DIRS_NEW_PREVIOUS_DAY}}",  get_formatted_dirs_new(&report.event_totals.previous_day)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_NEW_PREVIOUS_DAY}}",  get_dirs_new_change_pct(cur_new, &report.event_totals.previous_day)));
+    replacements.push(("{{TOTAL_DIRS_NEW_PREVIOUS_WEEK}}", get_formatted_dirs_new(&report.event_totals.previous_week)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_NEW_PREVIOUS_WEEK}}", get_dirs_new_change_pct(cur_new, &report.event_totals.previous_week)));
+    replacements.push(("{{TOTAL_DIRS_NEW_PREVIOUS_MONTH}}", get_formatted_dirs_new(&report.event_totals.previous_month)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_NEW_PREVIOUS_MONTH}}", get_dirs_new_change_pct(cur_new, &report.event_totals.previous_month)));
+
+    // Dirs changed
+    let cur_changed = et.total_dirs_changed;
+    replacements.push(("{{TOTAL_DIRS_CHANGED}}", cur_changed.to_string()));
+    replacements.push(("{{TOTAL_DIRS_CHANGED_PREVIOUS_DAY}}", get_formatted_dirs_changed(&report.event_totals.previous_day)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_CHANGED_PREVIOUS_DAY}}", get_dirs_changed_change_pct(cur_changed, &report.event_totals.previous_day)));
+    replacements.push(("{{TOTAL_DIRS_CHANGED_PREVIOUS_WEEK}}", get_formatted_dirs_changed(&report.event_totals.previous_week)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_CHANGED_PREVIOUS_WEEK}}", get_dirs_changed_change_pct(cur_changed, &report.event_totals.previous_week)));
+    replacements.push(("{{TOTAL_DIRS_CHANGED_PREVIOUS_MONTH}}", get_formatted_dirs_changed(&report.event_totals.previous_month)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_CHANGED_PREVIOUS_MONTH}}", get_dirs_changed_change_pct(cur_changed, &report.event_totals.previous_month)));
+
+    // Dirs unmodified
+    let cur_unmod = et.total_dirs_unmodified;
+    replacements.push(("{{TOTAL_DIRS_UNMODIFIED}}", cur_unmod.to_string()));
+    replacements.push(("{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_DAY}}", get_formatted_dirs_unmodified(&report.event_totals.previous_day)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_UNMODIFIED_PREVIOUS_DAY}}", get_dirs_unmodified_change_pct(cur_unmod, &report.event_totals.previous_day)));
+    replacements.push(("{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_WEEK}}", get_formatted_dirs_unmodified(&report.event_totals.previous_week)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_UNMODIFIED_PREVIOUS_WEEK}}", get_dirs_unmodified_change_pct(cur_unmod, &report.event_totals.previous_week)));
+    replacements.push(("{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_MONTH}}", get_formatted_dirs_unmodified(&report.event_totals.previous_month)));
+    replacements.push(("{{PERCENT_TOTAL_DIRS_UNMODIFIED_PREVIOUS_MONTH}}", get_dirs_unmodified_change_pct(cur_unmod, &report.event_totals.previous_month)));
         
     // Insert storage rows HTML
     replacements.push(("{{STORAGE_STATISTICS}}", storage_html));
@@ -316,6 +346,66 @@ fn get_files_unmodified_change_pct(cur: i64, opt: &Option<EventTotals>) -> Strin
     }
 
     let previous = opt.as_ref().map(|e| e.total_files_unmodified);
+    match previous {
+        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
+        _ => "–".into(),
+    }
+}
+
+/// Returns the total number of new dirs as a string, or "–" if not available.
+fn get_formatted_dirs_new(opt: &Option<EventTotals>) -> String {
+    opt.as_ref()
+        .map(|e| e.total_dirs_new.to_string())
+        .unwrap_or_else(|| "–".to_string())
+}
+
+/// Returns the % change in new dirs compared to previous, or "–" if not available.
+fn get_dirs_new_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
+    if cur < 0 {
+        return "–".into();
+    }
+
+    let previous = opt.as_ref().map(|e| e.total_dirs_new);
+    match previous {
+        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
+        _ => "–".into(),
+    }
+}
+
+/// Returns the total number of changed dirs as a string, or "–" if not available.
+fn get_formatted_dirs_changed(opt: &Option<EventTotals>) -> String {
+    opt.as_ref()
+        .map(|e| e.total_dirs_changed.to_string())
+        .unwrap_or_else(|| "–".to_string())
+}
+
+/// Returns the % change in changed dirs compared to previous, or "–" if not available.
+fn get_dirs_changed_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
+    if cur < 0 {
+        return "–".into();
+    }
+
+    let previous = opt.as_ref().map(|e| e.total_dirs_changed);
+    match previous {
+        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
+        _ => "–".into(),
+    }
+}
+
+/// Returns the total number of unmodified dirs as a string, or "–" if not available.
+fn get_formatted_dirs_unmodified(opt: &Option<EventTotals>) -> String {
+    opt.as_ref()
+        .map(|e| e.total_dirs_unmodified.to_string())
+        .unwrap_or_else(|| "–".to_string())
+}
+
+/// Returns the % change in unmodified dirs compared to previous, or "–" if not available.
+fn get_dirs_unmodified_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
+    if cur < 0 {
+        return "–".into();
+    }
+
+    let previous = opt.as_ref().map(|e| e.total_dirs_unmodified);
     match previous {
         Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
         _ => "–".into(),

@@ -5,19 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Daily Backup Summary</title>
   <style>
-    /* Simplified CSS without CSS variables */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: Arial, sans-serif;
-      background: #f9f9f9;
-      color: #404040;
-      line-height: 1.5;
-      padding: 16px;
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
-    a { color: #0066cc; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    /* Base */
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+      line-height: 1.5;
+      background: #f9f9f9;
+      color: #404040;
+      padding: 16px;
+    }
+    a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
 
+    /* Container */
     .container {
       max-width: 800px;
       margin: 0 auto;
@@ -26,41 +37,87 @@
       overflow: hidden;
     }
 
+    /* Header */
     header {
       background: #e0e0e0;
       padding: 16px;
       text-align: center;
     }
     header h1 {
-      margin-bottom: 8px;
       font-size: 1.5rem;
       color: #404040;
+      margin-bottom: 8px;
     }
     header p {
-      color: #606060;
       font-size: 0.9rem;
+      color: #606060;
     }
 
+
+    /* Tables & summaries */
+    .summary-headers,
+    .summary-table th,
+    .summary-table td,
+    .events-summary th,
+    .events-summary td {
+      font-size: 0.8rem;
+      text-align: center;
+    }
+    .summary-headers {
+      border-bottom: 1px solid #ccc;
+    }
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-right: auto;
+    }
+    .summary-table th,
+    .summary-table td {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+    }
+    .summary-table th {
+      background-color: #e8f4f8;
+    }
+
+    .events-summary th, .events-summary td {
+      text-align: center;
+      font-size: 0.8rem;
+    }
+
+    /* Lists */
+    ul.small {
+      list-style-type: none;
+      padding-left: 0;
+      margin: 0;
+      font-size: 0.8rem;
+      font-weight: 200;
+    }
     li {
       margin-left: 20px;
     }
     
+    /* Status cards layout */
     .status-table {
       width: 100%;
       padding: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
     }
     .card-cell {
       padding: 8px;
       width: 50%;
     }
-
     .card {
-      border-top: 5px solid;
       background: #fff;
       border-radius: 6px;
+      border-top: 5px solid transparent;
       padding: 16px;
       margin-bottom: 16px;
-      /* height: 230px; */
+    }
+    .card.small {
+      font-size: 0.8rem;
     }
     .card h2 {
       font-size: 1.1rem;
@@ -69,23 +126,39 @@
     .card h2 .icon {
       margin-right: 8px;
     }
-    .card p { font-size: 0.9rem; color: #606060; }
-    .card.small { font-size: 0.8rem; }
+    .card p {
+      font-size: 0.9rem;
+      color: #606060;
+    }
 
-    .success { border-color: #80c080; background: #c6e2c3; }
-    .error   { border-color: #b02020; background: #f8d7da; }
-    .warn    { border-color: #c08040; background: #fff3cd; }
-    .info    { border-color: #50a0c0; background: #d1ecf1; }
+    /* Card status colors */
+    .success {
+      border-color: #80c080;
+      background: #c6e2c3;
+    }
+    .error {
+      border-color: #b02020;
+      background: #f8d7da;
+    }
+    .warn {
+      border-color: #c08040;
+      background: #fff3cd;
+    }
+    .info {
+      border-color: #50a0c0;
+      background: #d1ecf1;
+    }
 
+    /* Storage bar */
     .storage {
       background: #fff;
       padding: 16px;
       border-top: 1px solid #ddd;
     }
     .storage h3 {
-      margin-bottom: 12px;
       font-size: 1rem;
       color: #404040;
+      margin-bottom: 12px;
     }
     .bar-container {
       background: #eee;
@@ -94,21 +167,22 @@
       position: relative;
     }
     .bar-used {
-      height: 100%;
       background: #80c080;
       border-radius: 6px;
+      height: 100%;
     }
     .bar-label {
+      position: absolute;
+      top: 0; left: 0;
       width: 100%;
+      height: 16px;
+      line-height: 16px;
       text-align: center;
       font-size: 0.75rem;
       color: #fff;
-      line-height: 16px;
-      position: absolute;
-      top: 0;
-      left: 0;
     }
 
+    /* Footer */
     .footer {
       background: #f0f0f0;
       padding: 16px;
@@ -117,10 +191,10 @@
       color: #606060;
     }
 
+    /* Responsive */
     @media screen and (max-width: 600px) {
       .card-cell {
-        display: block;
-        width: 100% !important;
+        flex: 1 1 100%;
         padding: 8px 0;
       }
       .card {
@@ -137,23 +211,100 @@
     </header>
 
     <section class="status-grid">
-        <table class="status-table" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+      <table class="status-table events-summary" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
           <tr>
             <td class="card-cell">
               <div class="card info">
-                <h2><span class="icon">📊</span>Backup Summary from {{START_DATE}} to {{END_DATE}}</h2>
+              <h2 class="summary-headers">Date Range: May 2, 2025, 11:13 AM – May 3, 2025, 11:13 AM (UTC -4)</h2>
+              <h3 class="summary-header">📊 Events & Snapshots</h2>
                 <ul class="small">
                     <li>Total Events: {{TOTAL_EVENTS}}</li>
                     <li>Total Snapshots: {{TOTAL_SNAPSHOT_SUCCESS}}</li>
-                    <li>Total Snapshot Failures: {{TOTAL_SNAPSHOT_ERROR}}</li>
-                    <li>Total Forget: {{TOTAL_FORGET_SUCCESS}}</li>
-                    <li>Total Forget Failures: {{TOTAL_FORGET_ERROR}}</li>
-                    <li>Total Data Processed: {{TOTAL_DATA_PROCESSED}} | 📅 Day: {{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}} ({{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}) | 📆 Week: {{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}} ({{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}) | 🗓️ Month: {{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}} ({{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}})</li>
-                    <li>Total Duration: {{TOTAL_DURATION}} | 📅 Day: {{TOTAL_DURATION_PREVIOUS_DAY}} ({{PERCENT_TOTAL_DURATION_PREVIOUS_DAY}}) | 📆 Week: {{TOTAL_DURATION_PREVIOUS_WEEK}} ({{PERCENT_TOTAL_DURATION_PREVIOUS_WEEK}}) | 🗓️ Month: {{TOTAL_DURATION_PREVIOUS_MONTH}} ({{PERCENT_TOTAL_DURATION_PREVIOUS_MONTH}})</li>
-                    <li>Total Files New: {{TOTAL_FILES_NEW}} | 📅 Day: {{TOTAL_FILES_NEW_PREVIOUS_DAY}} ({{PERCENT_TOTAL_FILES_NEW_PREVIOUS_DAY}}) | 📆 Week: {{TOTAL_FILES_NEW_PREVIOUS_WEEK}} ({{PERCENT_TOTAL_FILES_NEW_PREVIOUS_WEEK}}) | 🗓️ Month: {{TOTAL_FILES_NEW_PREVIOUS_MONTH}} ({{PERCENT_TOTAL_FILES_NEW_PREVIOUS_MONTH}})</li>
-                    <li>Total Files Changed: {{TOTAL_FILES_CHANGED}} | 📅 Day: {{TOTAL_FILES_CHANGED_PREVIOUS_DAY}} ({{PERCENT_TOTAL_FILES_CHANGED_PREVIOUS_DAY}}) | 📆 Week: {{TOTAL_FILES_CHANGED_PREVIOUS_WEEK}} ({{PERCENT_TOTAL_FILES_CHANGED_PREVIOUS_WEEK}}) | 🗓️ Month: {{TOTAL_FILES_CHANGED_PREVIOUS_MONTH}} ({{PERCENT_TOTAL_FILES_CHANGED_PREVIOUS_MONTH}})</li>
-                    <li>Total Files Unmodified: {{TOTAL_FILES_UNMODIFIED}} | 📅 Day: {{TOTAL_FILES_UNMODIFIED_PREVIOUS_DAY}} ({{PERCENT_TOTAL_FILES_UNMODIFIED_PREVIOUS_DAY}}) | 📆 Week: {{TOTAL_FILES_UNMODIFIED_PREVIOUS_WEEK}} ({{PERCENT_TOTAL_FILES_UNMODIFIED_PREVIOUS_WEEK}}) | 🗓️ Month: {{TOTAL_FILES_UNMODIFIED_PREVIOUS_MONTH}} ({{PERCENT_TOTAL_FILES_UNMODIFIED_PREVIOUS_MONTH}})</li>
+                <li>Snapshot Failures: {{TOTAL_SNAPSHOT_ERROR}}</li>
+                <li>Forget Operations: {{TOTAL_FORGET_SUCCESS}}</li>
+                <li>Forget Failures: {{TOTAL_FORGET_ERROR}}</li>
                   </ul>
+
+                <table class="status-table" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                  <tr>
+                    <td class="card-cell">
+                      <div class="section">
+                        <h2 class="summary-headers">💾 Data Processed</h2>
+                        <table class="summary-table">
+                          <thead>
+                            <tr><th>Scope</th><th>Amount</th><th>Comparison</th></tr>
+                          </thead>
+                          <tbody>
+                            <tr><td>Total</td><td>{{TOTAL_DATA_PROCESSED}}</td><td>–</td></tr>
+                            <tr><td>Day</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td></tr>
+                            <tr><td>Week</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td></tr>
+                            <tr><td>Month</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                    <td class="card-cell">
+                      <div class="section">
+                        <h2 class="summary-headers">⏱️ Duration</h2>
+                        <table class="summary-table">
+                          <thead>
+                            <tr><th>Scope</th><th>Time</th><th>Comparison</th></tr>
+                          </thead>
+                          <tbody>
+                            <tr><td>Total</td><td>{{TOTAL_DURATION}}</td><td>–</td></tr>
+                            <tr><td>Day</td><td>{{TOTAL_DURATION_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_DAY}}</td></tr>
+                            <tr><td>Week</td><td>{{TOTAL_DURATION_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_WEEK}}</td></tr>
+                            <tr><td>Month</td><td>{{TOTAL_DURATION_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_MONTH}}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="card-cell">
+                      <div class="section">
+                        <h2 class="summary-headers">📁 Files Overview</h2>
+                        <table class="summary-table">
+                          <thead>
+                            <tr>
+                              <th>Category</th>
+                              <th>Total</th>
+                              <th>Day</th>
+                              <th>Week</th>
+                              <th>Month</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr><td>New Files</td><td>{{TOTAL_FILES_NEW}}</td><td>{{TOTAL_FILES_NEW_PREVIOUS_DAY}}</td><td>{{TOTAL_FILES_NEW_PREVIOUS_WEEK}}</td><td>{{TOTAL_FILES_NEW_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Changed Files</td><td>{{TOTAL_FILES_CHANGED}}</td><td>{{TOTAL_FILES_CHANGED_PREVIOUS_DAY}}</td><td>{{TOTAL_FILES_CHANGED_PREVIOUS_WEEK}}</td><td>{{TOTAL_FILES_CHANGED_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Unmodified Files</td><td>{{TOTAL_FILES_UNMODIFIED}}</td><td>{{TOTAL_FILES_UNMODIFIED_PREVIOUS_DAY}}</td><td>{{TOTAL_FILES_UNMODIFIED_PREVIOUS_WEEK}}</td><td>{{TOTAL_FILES_UNMODIFIED_PREVIOUS_MONTH}}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                    <td class="card-cell">
+                      <div class="section">
+                        <h2 class="summary-headers">📁 Directories Overview</h2>
+                        <table class="summary-table">
+                          <thead>
+                            <tr>
+                              <th>Category</th>
+                              <th>Total</th>
+                              <th>Day</th>
+                              <th>Week</th>
+                              <th>Month</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr><td>New Dirs</td><td>{{TOTAL_DIRS_NEW}}</td><td>{{TOTAL_DIRS_NEW_PREVIOUS_DAY}}</td><td>{{TOTAL_DIRS_NEW_PREVIOUS_WEEK}}</td><td>{{TOTAL_DIRS_NEW_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Changed Dirs</td><td>{{TOTAL_DIRS_CHANGED}}</td><td>{{TOTAL_DIRS_CHANGED_PREVIOUS_DAY}}</td><td>{{TOTAL_DIRS_CHANGED_PREVIOUS_WEEK}}</td><td>{{TOTAL_DIRS_CHANGED_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Unmodified Dirs</td><td>{{TOTAL_DIRS_UNMODIFIED}}</td><td>{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_DAY}}</td><td>{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_WEEK}}</td><td>{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_MONTH}}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
               </div>
             </td>
         </table>
