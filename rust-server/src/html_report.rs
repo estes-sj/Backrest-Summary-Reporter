@@ -1,7 +1,7 @@
 use axum::{
     http::StatusCode,
 };
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local, Offset, TimeZone};
 use std::{fs, path::Path};
 
 use crate::{
@@ -11,15 +11,78 @@ use crate::{
 
 /// Renders the full report email, replacing placeholders in the template.
 pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<String, &'static str> {
+    
+    // 1) Load all the snapshot templates once:
     let mut html      = fs::read_to_string("html/report_variabled.html")
         .map_err(|_| "Failed to read HTML template")?;
-    let entry_tmpl    = fs::read_to_string("html/storage_entry.html")
+    let success_tmpl = fs::read_to_string("html/success_snapshot.html")
+        .map_err(|_| "Failed to read success snapshot template")?;
+    let error_tmpl   = fs::read_to_string("html/error_snapshot.html")
+        .map_err(|_| "Failed to read error snapshot template")?;
+    let row_tmpl     = fs::read_to_string("html/snapshot_status_row.html")
+        .map_err(|_| "Failed to read snapshot status row template")?;
+    let table_tmpl   = fs::read_to_string("html/snapshot_status_table.html")
+        .map_err(|_| "Failed to read snapshot status table template")?;
+    let storage_entry_tmpl    = fs::read_to_string("html/storage_entry.html")
         .map_err(|_| "Failed to read storage entry template")?;
+
+    // 2) Render each summary into its per‐entry HTML
+    let mut entries: Vec<String> = Vec::new();
+    for summary in &report.snapshot_summaries {
+        let tpl = match summary.event.as_str() {
+            "snapshot success" => &success_tmpl,
+            "snapshot error"   => &error_tmpl,
+            _                  => continue, // skip other events
+        };
+
+        // assume success_tmpl and error_tmpl have placeholders like {{ID}}, {{TIME}}, {{MESSAGE}}
+        let mut entry = tpl.clone();
+        entry = entry.replace("{{SNAPSHOT_PLAN}}", &summary.plan.to_string());
+        entry = entry.replace("{{SNAPSHOT_SUMMARY_ID}}", &summary.snapshot.to_string()[..10]);
+        entry = entry.replace("{{SNAPSHOT_TIME}}", &format_local_datetime(summary.created_at));
+        entry = entry.replace(
+            "{{SNAPSHOT_NEW_FILES}}",
+            &summary.files_new
+                .map_or("-".to_string(), |v| v.to_string()),
+        );
+        entry = entry.replace(
+            "{{SNAPSHOT_CHANGED_FILES}}",
+            &summary.files_changed
+                .map_or("-".to_string(), |v| v.to_string()),
+        );
+        entry = entry.replace(
+            "{{SNAPSHOT_UNMODIFIED_FILES}}",
+            &summary.files_unmodified
+                .map_or("-".to_string(), |v| v.to_string()),
+        );
+        entry = entry.replace(
+            "{{SNAPSHOT_TOTAL_PROCESSED}}",
+            &summary.total_bytes_processed
+                .map_or("-".to_string(), |v| format_bytes(v as u64)),
+        );
+        entry = entry.replace("{{SNAPSHOT_TOTAL_DURATION}}", &format_duration_secs(summary.total_duration.unwrap_or(0.0) as i64));
+        entry = entry.replace("{{STORAGE_ERROR}}", summary.error.as_deref().unwrap_or("N/A"));
+
+        entries.push(entry);
+    }
+
+    // 3) Group into rows of two entries each
+    let mut rows_html = String::new();
+    for chunk in entries.chunks(2) {
+        // join 1 or 2 entries back-to-back
+        let joined = chunk.join("");
+        // inject into row template
+        let row_html = row_tmpl.replace("{{SNAPSHOT}}", &joined);
+        rows_html.push_str(&row_html);
+    }
+
+    // 4) Build the full table by splicing in all the rows
+    let snapshot_table_html = table_tmpl.replace("{{SNAPSHOT_ROW}}", &rows_html);
 
     // Build storage rows
     let storage_html = report.storage_statistics
         .iter()
-        .map(|stat| render_storage_entry(&entry_tmpl, stat))
+        .map(|stat| render_storage_entry(&storage_entry_tmpl, stat))
         .collect::<String>();
 
     // Prepare replacements
@@ -29,8 +92,18 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     // Config fields
     replacements.push(("{{SERVER_NAME}}", cfg.server_name.clone().unwrap_or_default()));
     replacements.push(("{{BACKREST_URL}}", cfg.backrest_url.clone().unwrap_or_default()));
-    replacements.push(("{{START_DATE}}", format_local_datetime(report.event_totals.current.start_date)));
-    replacements.push(("{{END_DATE}}",   format_local_datetime(report.event_totals.current.end_date)));
+    replacements.push((
+        "{{START_DATE}}",
+        format_pretty_datetime(report.event_totals.current.start_date),
+    ));
+    replacements.push((
+        "{{END_DATE}}",
+        format_pretty_datetime(report.event_totals.current.end_date),
+    ));
+    replacements.push((
+        "{{DATE_RANGE_TIMEZONE}}",
+        format_local_offset(report.event_totals.current.start_date),
+    ));
     replacements.push(("{{REPORT_GENERATION_DATE}}", format_local_datetime(now)));
 
     // Event totals (current)
@@ -130,7 +203,10 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     replacements.push(("{{PERCENT_TOTAL_DIRS_UNMODIFIED_PREVIOUS_WEEK}}", get_dirs_unmodified_change_pct(cur_unmod, &report.event_totals.previous_week)));
     replacements.push(("{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_MONTH}}", get_formatted_dirs_unmodified(&report.event_totals.previous_month)));
     replacements.push(("{{PERCENT_TOTAL_DIRS_UNMODIFIED_PREVIOUS_MONTH}}", get_dirs_unmodified_change_pct(cur_unmod, &report.event_totals.previous_month)));
-        
+
+    // Insert snapshot summaries
+    replacements.push(("{{SNAPSHOT_TABLE}}", snapshot_table_html));
+
     // Insert storage rows HTML
     replacements.push(("{{STORAGE_STATISTICS}}", storage_html));
 
@@ -232,6 +308,34 @@ fn format_local_datetime<Tz: TimeZone>(dt: DateTime<Tz>) -> String {
     dt.with_timezone(&Local)
       .format("%m/%d/%Y at %I:%M:%S %p %Z")
       .to_string()
+}
+
+/// Formats any DateTime into a string like:
+/// "May 2, 2025, 11:13 AM"
+fn format_pretty_datetime<Tz: TimeZone>(dt: DateTime<Tz>) -> String {
+    dt.with_timezone(&Local)
+      .format("%B %-d, %Y, %-I:%M %p")
+      .to_string()
+}
+
+/// Returns the local UTC offset as a string like:
+/// "(UTC -4)"    // if offset is exactly -4 hours
+/// "(UTC +5:30)" // if offset has minutes
+fn format_local_offset<Tz: TimeZone>(dt: DateTime<Tz>) -> String {
+    // convert to Local so we get the correct offset for the current locale
+    let local_dt = dt.with_timezone(&Local);
+    // get a FixedOffset, then total seconds east of UTC
+    let secs = local_dt.offset().fix().local_minus_utc();
+    let hours = secs / 3600;
+    let mins = (secs.abs() % 3600) / 60;
+
+    if secs % 3600 == 0 {
+        // whole hours only
+        format!("(UTC {:+})", hours)
+    } else {
+        // include minutes
+        format!("(UTC {:+}:{:02})", hours, mins)
+    }
 }
 
 /// Formats a percentage change between a current and optional previous value:

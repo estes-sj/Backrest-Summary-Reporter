@@ -101,9 +101,6 @@
     .status-table {
       width: 100%;
       padding: 16px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
     }
     .card-cell {
       padding: 8px;
@@ -114,7 +111,6 @@
       border-radius: 6px;
       border-top: 5px solid transparent;
       padding: 16px;
-      margin-bottom: 16px;
     }
     .card.small {
       font-size: 0.8rem;
@@ -194,7 +190,8 @@
     /* Responsive */
     @media screen and (max-width: 600px) {
       .card-cell {
-        flex: 1 1 100%;
+        display: block;
+        width: 100% !important;
         padding: 8px 0;
       }
       .card {
@@ -212,18 +209,18 @@
 
     <section class="status-grid">
       <table class="status-table events-summary" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-          <tr>
-            <td class="card-cell">
-              <div class="card info">
-              <h2 class="summary-headers">Date Range: May 2, 2025, 11:13 AM – May 3, 2025, 11:13 AM (UTC -4)</h2>
+        <tr>
+          <td class="card-cell">
+            <div class="card info">
+              <h2 class="summary-headers">Date Range: {{START_DATE}} – {{END_DATE}} {{DATE_RANGE_TIMEZONE}}</h2>
               <h3 class="summary-header">📊 Events & Snapshots</h2>
-                <ul class="small">
-                    <li>Total Events: {{TOTAL_EVENTS}}</li>
-                    <li>Total Snapshots: {{TOTAL_SNAPSHOT_SUCCESS}}</li>
+              <ul class="small">
+                <li>Total Events: {{TOTAL_EVENTS}}</li>
+                <li>Total Snapshots: {{TOTAL_SNAPSHOT_SUCCESS}}</li>
                 <li>Snapshot Failures: {{TOTAL_SNAPSHOT_ERROR}}</li>
                 <li>Forget Operations: {{TOTAL_FORGET_SUCCESS}}</li>
                 <li>Forget Failures: {{TOTAL_FORGET_ERROR}}</li>
-                  </ul>
+                </ul>
 
                 <table class="status-table" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                   <tr>
@@ -305,10 +302,13 @@
                     </td>
                   </tr>
                 </table>
-              </div>
-            </td>
-        </table>
-      </section>  
+            </div>
+          </td>
+      </table>
+    </section>  
+
+    <!-- snapshots -->
+    {{SNAPSHOT_TABLE}}
 
     <!-- storage -->
     {{STORAGE_STATISTICS}}
