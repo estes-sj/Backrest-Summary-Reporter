@@ -5,17 +5,12 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Local, Utc};
 use fs2::{free_space, total_space};
-use std::{fs, net::SocketAddr, path::Path};
+use std::{fs, net::SocketAddr};
 use sqlx::{PgPool, Row};
-use lettre::{
-    AsyncTransport,
-    message::{header::ContentType, Message},
-    transport::smtp::{authentication::Credentials, AsyncSmtpTransport},
-    Tokio1Executor,
-};
 use crate::{
     config::{Config,StorageConfig},
     email::{EmailClient},
+    html_report::{render_report_html, write_report_html},
     models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
@@ -182,6 +177,48 @@ pub async fn get_events_and_storage_stats_handler(
         storage_statistics,
     };
     Ok((StatusCode::OK, Json(payload)))
+}
+
+/// POST `/generate-and-send-email-report` endpoint.
+///
+/// * Validates API key and caller IP.
+/// * Gathers event totals, snapshot summaries, and storage stats.
+/// * Renders the combined report to HTML, writes it to disk, and sends via email.
+///
+/// # Errors
+/// Returns an unauthorized error if API key validation fails, or an internal error if any step fails.
+pub async fn generate_and_send_email_report(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State((pool, cfg)): State<(PgPool, Config)>,
+    headers: HeaderMap,
+    Json(req): Json<StatsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    // 1) Auth
+    validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
+
+    // 2) Gather all pieces of the report
+    let event_totals       = load_event_totals_report(&pool, req.start_date, req.end_date).await?;
+    let snapshot_summaries = fetch_combined_stats(&pool, req.start_date, req.end_date).await?;
+    load_and_insert_storage_stats(&pool, &cfg.storage_mounts).await?;
+    let storage_stats      = load_storage_stats(&pool, &cfg.storage_mounts).await?;
+
+    let report = GenerateReport {
+        event_totals,
+        snapshot_summaries,
+        storage_statistics: storage_stats,
+    };
+
+    // 3) Render the HTML body
+    let html = render_report_html(&cfg, &report)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // 4) Write to disk (optional) and send email
+    write_report_html("/reports/latest_report.html", &html)?;
+    let client = EmailClient::from_config(&cfg)?;
+    // TODO: Uncomment when complete
+    //client.send_html("🚀 System Report", html).await?;
+
+    Ok((StatusCode::OK, "Report email sent"))
 }
 
 ///

@@ -1,6 +1,8 @@
 mod config;
 mod db;
+mod email;
 mod handlers;
+mod html_report;
 mod models;
 
 use std::net::SocketAddr;
@@ -14,6 +16,7 @@ use config::Config;
 use db::init_db;
 use handlers::{
     add_event_handler,
+    generate_and_send_email_report,
     get_events_and_storage_stats_handler,
     get_events_in_range_handler,
     get_events_in_range_totals_handler,
@@ -43,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
     // now move cfg into the router
     let app = Router::new()
         .route("/add-event", post(add_event_handler))
+        .route("/generate-and-send-email-report", post(generate_and_send_email_report))
         .route("/get-events-and-storage-stats", post(get_events_and_storage_stats_handler))
         .route("/get-events-in-range", post(get_events_in_range_handler))
         .route("/get-events-in-range-totals", post(get_events_in_range_totals_handler))

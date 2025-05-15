@@ -25,6 +25,10 @@ pub struct Config {
 
     // --- Storage mounts to monitor ---
     pub storage_mounts: Vec<StorageConfig>,
+
+    // --- Misc. variables used for email reports ---
+    pub server_name: Option<String>,
+    pub backrest_url: Option<String>,
 }
 
 /// One storage mount to track
@@ -84,6 +88,10 @@ impl Config {
             }
         }
 
+        // Optional misc. variables used for email reports
+        let server_name = env::var("SERVER_NAME").ok();
+        let backrest_url = env::var("BACKREST_URL").ok();
+
         Ok(Config {
             database_url,
             auth_key,
@@ -95,6 +103,8 @@ impl Config {
             email_from,
             email_to,
             storage_mounts,
+            server_name,
+            backrest_url,
         })
     }
 }

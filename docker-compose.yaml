@@ -56,12 +56,22 @@ services:
       STORAGE_NICK_4: ${STORAGE_NICK_4}
       STORAGE_PATH_5: ${STORAGE_PATH_5}
       STORAGE_NICK_5: ${STORAGE_NICK_5}
+      STORAGE_PATH_6: ${STORAGE_PATH_6}
+      STORAGE_NICK_6: ${STORAGE_NICK_6}
+
+      # Additional misc. settings used in the email reports
+      SERVER_NAME: ${SERVER_NAME}
+      BACKREST_URL: ${BACKREST_URL}
     ports:
       - "2682:2682"   # Expose API endpoint
     volumes:
+      # Store generated email reports
+      - ./reports:/reports
       # Host bind-mounts for local or remote mount points (read-only since we are only pulling stats)
       - /opt:/mnt/opt:ro
       - /mnt:/mnt/mnt:ro
+      - /sam-fedserver02/opt:/sam-fedserver02/opt:ro
+      - /mnt-backup:/mnt-backup:ro
       # Example for SSHFS or pre-mounted SFTP remote (uncomment if used)
       # - /mnt/immich_remote:/mnt/mnt/immich_remote:ro
       # Google Drive mountpoint from rclone container

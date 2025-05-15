@@ -1,0 +1,72 @@
+    <!-- storage -->
+    <table 
+        role="presentation" 
+        width="100%" 
+        cellpadding="0" 
+        cellspacing="0" 
+        style="background:#fff; padding:16px; border-top:1px solid #ddd; font-family:Arial,sans-serif;"
+    >
+    <tr>
+        <!-- left cell: storage name -->
+        <td style="font-size:16px; color:#404040; padding-bottom:8px; vertical-align:bottom;">
+            <strong>{{STORAGE_NICKNAME}}</strong>
+        </td>
+        <!-- right cell: date of stats -->
+        <td style="font-size:12px; color:#606060; padding-bottom:8px; text-align:right; vertical-align:bottom;">
+            {{TIME_ADDED}}
+        </td>
+    </tr>
+
+    <!-- the bar itself -->
+    <tr>
+        <td colspan="2">
+        <table
+            role="presentation"
+            width="100%"
+            cellpadding="0"
+            cellspacing="0"
+            style="border-collapse:collapse; height:16px; line-height:1; text-indent:-9999px;"
+        >
+            <tr>
+            <!-- filled portion with left radius -->
+            <td 
+                width="{{PERCENT_USED_CURRENT}}%" 
+                bgcolor="{{PERCENT_USED_COLOR}}" 
+                style="
+                height:16px;
+                border-top-left-radius:6px;
+                border-bottom-left-radius:6px;
+                "
+            >&nbsp;</td>
+            <!-- empty portion with right radius -->
+            <td 
+                width="{{PERCENT_FREE_CURRENT}}%" 
+                bgcolor="#eee" 
+                style="
+                height:16px;
+                border-top-right-radius:6px;
+                border-bottom-right-radius:6px;
+                "
+            >&nbsp;</td>
+            </tr>
+        </table>
+        </td>
+    </tr>
+    <!-- combined label + stats row -->
+    <tr>
+        <td colspan="2">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+            <!-- left cell: usage label -->
+            <td style="font-size:12px; color:#404040; padding-top:4px; vertical-align:middle;">
+                {{USED_SPACE_CURRENT}} / {{TOTAL_SPACE_CURRENT}} ({{PERCENT_USED_CURRENT}}%)
+            </td>
+            <!-- right cell: change stats -->
+            <td style="font-size:12px; color:#606060; padding-top:4px; text-align:right; vertical-align:middle;">
+                Day: {{STORAGE_USED_PREVIOUS_DAY_PERCENT_INCREASE}} | Week: {{STORAGE_USED_PREVIOUS_WEEK_PERCENT_INCREASE}} | Month: {{STORAGE_USED_PREVIOUS_MONTH_PERCENT_INCREASE}}
+            </td>
+            </tr>
+        </table>
+        </td>
+    </tr>
+    </table>
