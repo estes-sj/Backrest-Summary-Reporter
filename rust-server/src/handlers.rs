@@ -10,7 +10,7 @@ use sqlx::{PgPool, Row};
 use crate::{
     config::{Config,StorageConfig},
     email::{EmailClient},
-    html_report::{render_report_html, write_report_html},
+    html_report::{format_range_iso_with_offset, render_report_html, write_report_html},
     models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
@@ -102,6 +102,8 @@ pub async fn send_test_email_handler(
     // 4) Modify the timestamp
     let timestamp = Local::now().format("%d/%m/%Y at %I:%M %p").to_string();
     html = html.replace("{{TIMESTAMP}}", &timestamp);
+    html = html.replace("{{BACKREST_URL}}", &cfg.backrest_url.clone().unwrap_or_default());
+    html = html.replace("{{PGADMIN_URL}}", &cfg.pgadmin_url.clone().unwrap_or_default());
 
     // 5) Build the email and send
     client.send_html("🚀 Test Email", html).await?;
@@ -216,7 +218,7 @@ pub async fn generate_and_send_email_report(
     write_report_html("/reports/latest_report.html", &html)?;
     let client = EmailClient::from_config(&cfg)?;
     // TODO: Uncomment when complete
-    //client.send_html("🚀 System Report", html).await?;
+    //client.send_html(&format!("🚀 Backup Summary ({})", format_range_iso_with_offset(req.start_date, req.end_date)), html).await?;
 
     Ok((StatusCode::OK, "Report email sent"))
 }

@@ -2,7 +2,7 @@ use axum::{
     http::StatusCode,
 };
 use chrono::{DateTime, Local, Offset, TimeZone};
-use std::{fs, path::Path};
+use std::{fs, path::Path, borrow::Borrow};
 
 use crate::{
     config::Config,
@@ -92,6 +92,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     // Config fields
     replacements.push(("{{SERVER_NAME}}", cfg.server_name.clone().unwrap_or_default()));
     replacements.push(("{{BACKREST_URL}}", cfg.backrest_url.clone().unwrap_or_default()));
+    replacements.push(("{{PGADMIN_URL}}", cfg.pgadmin_url.clone().unwrap_or_default()));
     replacements.push((
         "{{START_DATE}}",
         format_pretty_datetime(report.event_totals.current.start_date),
@@ -146,7 +147,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
 
     // Files new
     let cur_new = et.total_files_new;
-    replacements.push(("{{TOTAL_FILES_NEW}}", cur_new.to_string()));
+    replacements.push(("{{TOTAL_FILES_NEW}}", get_formatted_files_new(&report.event_totals.current)));
     replacements.push(("{{TOTAL_FILES_NEW_PREVIOUS_DAY}}",  get_formatted_files_new(&report.event_totals.previous_day)));
     replacements.push(("{{PERCENT_TOTAL_FILES_NEW_PREVIOUS_DAY}}",  get_files_new_change_pct(cur_new, &report.event_totals.previous_day)));
     replacements.push(("{{TOTAL_FILES_NEW_PREVIOUS_WEEK}}", get_formatted_files_new(&report.event_totals.previous_week)));
@@ -156,7 +157,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
 
     // Files changed
     let cur_changed = et.total_files_changed;
-    replacements.push(("{{TOTAL_FILES_CHANGED}}", cur_changed.to_string()));
+    replacements.push(("{{TOTAL_FILES_CHANGED}}", get_formatted_files_changed(&report.event_totals.current)));
     replacements.push(("{{TOTAL_FILES_CHANGED_PREVIOUS_DAY}}", get_formatted_files_changed(&report.event_totals.previous_day)));
     replacements.push(("{{PERCENT_TOTAL_FILES_CHANGED_PREVIOUS_DAY}}", get_files_changed_change_pct(cur_changed, &report.event_totals.previous_day)));
     replacements.push(("{{TOTAL_FILES_CHANGED_PREVIOUS_WEEK}}", get_formatted_files_changed(&report.event_totals.previous_week)));
@@ -166,7 +167,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
 
     // Files unmodified
     let cur_unmod = et.total_files_unmodified;
-    replacements.push(("{{TOTAL_FILES_UNMODIFIED}}", cur_unmod.to_string()));
+    replacements.push(("{{TOTAL_FILES_UNMODIFIED}}", get_formatted_files_unmodified(&report.event_totals.current)));
     replacements.push(("{{TOTAL_FILES_UNMODIFIED_PREVIOUS_DAY}}", get_formatted_files_unmodified(&report.event_totals.previous_day)));
     replacements.push(("{{PERCENT_TOTAL_FILES_UNMODIFIED_PREVIOUS_DAY}}", get_files_unmodified_change_pct(cur_unmod, &report.event_totals.previous_day)));
     replacements.push(("{{TOTAL_FILES_UNMODIFIED_PREVIOUS_WEEK}}", get_formatted_files_unmodified(&report.event_totals.previous_week)));
@@ -176,7 +177,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
 
     // Dirs new
     let cur_new = et.total_dirs_new;
-    replacements.push(("{{TOTAL_DIRS_NEW}}", cur_new.to_string()));
+    replacements.push(("{{TOTAL_DIRS_NEW}}", get_formatted_dirs_new(&report.event_totals.current)));
     replacements.push(("{{TOTAL_DIRS_NEW_PREVIOUS_DAY}}",  get_formatted_dirs_new(&report.event_totals.previous_day)));
     replacements.push(("{{PERCENT_TOTAL_DIRS_NEW_PREVIOUS_DAY}}",  get_dirs_new_change_pct(cur_new, &report.event_totals.previous_day)));
     replacements.push(("{{TOTAL_DIRS_NEW_PREVIOUS_WEEK}}", get_formatted_dirs_new(&report.event_totals.previous_week)));
@@ -186,7 +187,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
 
     // Dirs changed
     let cur_changed = et.total_dirs_changed;
-    replacements.push(("{{TOTAL_DIRS_CHANGED}}", cur_changed.to_string()));
+    replacements.push(("{{TOTAL_DIRS_CHANGED}}", get_formatted_dirs_changed(&report.event_totals.current)));
     replacements.push(("{{TOTAL_DIRS_CHANGED_PREVIOUS_DAY}}", get_formatted_dirs_changed(&report.event_totals.previous_day)));
     replacements.push(("{{PERCENT_TOTAL_DIRS_CHANGED_PREVIOUS_DAY}}", get_dirs_changed_change_pct(cur_changed, &report.event_totals.previous_day)));
     replacements.push(("{{TOTAL_DIRS_CHANGED_PREVIOUS_WEEK}}", get_formatted_dirs_changed(&report.event_totals.previous_week)));
@@ -196,7 +197,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
 
     // Dirs unmodified
     let cur_unmod = et.total_dirs_unmodified;
-    replacements.push(("{{TOTAL_DIRS_UNMODIFIED}}", cur_unmod.to_string()));
+    replacements.push(("{{TOTAL_DIRS_UNMODIFIED}}", get_formatted_dirs_unmodified(&report.event_totals.current)));
     replacements.push(("{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_DAY}}", get_formatted_dirs_unmodified(&report.event_totals.previous_day)));
     replacements.push(("{{PERCENT_TOTAL_DIRS_UNMODIFIED_PREVIOUS_DAY}}", get_dirs_unmodified_change_pct(cur_unmod, &report.event_totals.previous_day)));
     replacements.push(("{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_WEEK}}", get_formatted_dirs_unmodified(&report.event_totals.previous_week)));
@@ -338,6 +339,24 @@ fn format_local_offset<Tz: TimeZone>(dt: DateTime<Tz>) -> String {
     }
 }
 
+/// Formats a start and end time like:
+/// `2025-05-01 13:13 to 2025-05-16 13:13 -04:00`
+pub fn format_range_iso_with_offset<Tz: TimeZone>(
+    start: DateTime<Tz>,
+    end: DateTime<Tz>,
+) -> String {
+    let start_local = start.with_timezone(&Local);
+    let end_local = end.with_timezone(&Local);
+    let offset = end_local.offset(); // both have same offset in same timezone
+
+    format!(
+        "{} to {} {}",
+        start_local.format("%Y-%m-%d %H:%M"),
+        end_local.format("%Y-%m-%d %H:%M"),
+        offset
+    )
+}
+
 /// Formats a percentage change between a current and optional previous value:
 /// - Returns "↑x.xx%" if increased
 /// - Returns "↓x.xx%" if decreased
@@ -396,122 +415,125 @@ fn format_duration_secs(secs: i64) -> String {
     format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
 }
 
-/// Returns the total number of new files as a string, or "–" if not available.
-fn get_formatted_files_new(opt: &Option<EventTotals>) -> String {
-    opt.as_ref()
-        .map(|e| e.total_files_new.to_string())
+/// A trait for "something I can borrow as an optional `&EventTotals`."
+pub trait AsEventOpt {
+    fn as_event_opt(&self) -> Option<&EventTotals>;
+}
+
+impl AsEventOpt for Option<EventTotals> {
+    fn as_event_opt(&self) -> Option<&EventTotals> {
+        self.as_ref()
+    }
+}
+
+impl AsEventOpt for EventTotals {
+    fn as_event_opt(&self) -> Option<&EventTotals> {
+        Some(self)
+    }
+}
+
+/// Formats a total count value extracted from EventTotals (or an Option).
+/// Returns the value as a string, or "–" if not available.
+/// Uses scientific notation if the number exceeds 99,999.
+fn get_formatted_total<T, F>(opt: &T, extractor: F) -> String
+where
+    T: AsEventOpt,
+    F: Fn(&EventTotals) -> i64,
+{
+    opt.as_event_opt()
+        .map(|e| {
+            let val = extractor(e);
+            if val.abs() > 99_999 {
+                format!("{:.2e}", val as f64)
+            } else {
+                val.to_string()
+            }
+        })
         .unwrap_or_else(|| "–".to_string())
+}
+
+/// Computes the percent change between a current value and a previous value.
+/// `opt` can be an Option<EventTotals> or an EventTotals directly.
+/// Returns the percentage as a string, or "–" if not available or invalid.
+fn get_change_pct<T, F>(cur: i64, opt: &T, extractor: F) -> String
+where
+    T: AsEventOpt,
+    F: Fn(&EventTotals) -> i64,
+{
+    if cur < 0 {
+        return "–".into();
+    }
+
+    match opt.as_event_opt().map(|e| extractor(e)) {
+        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
+        _ => "–".into(),
+    }
+}
+
+///
+/// FILE COUNTERS
+/// 
+
+/// Returns the total number of new files as a string, or "–" if not available.
+fn get_formatted_files_new<T: AsEventOpt>(opt: &T) -> String {
+    get_formatted_total(opt, |e| e.total_files_new)
 }
 
 /// Returns the % change in new files compared to previous, or "–" if not available.
-fn get_files_new_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
-    if cur < 0 {
-        return "–".into();
-    }
-
-    let previous = opt.as_ref().map(|e| e.total_files_new);
-    match previous {
-        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
-        _ => "–".into(),
-    }
+fn get_files_new_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
+    get_change_pct(cur, opt, |e| e.total_files_new)
 }
 
 /// Returns the total number of changed files as a string, or "–" if not available.
-fn get_formatted_files_changed(opt: &Option<EventTotals>) -> String {
-    opt.as_ref()
-        .map(|e| e.total_files_changed.to_string())
-        .unwrap_or_else(|| "–".to_string())
+fn get_formatted_files_changed<T: AsEventOpt>(opt: &T) -> String {
+    get_formatted_total(opt, |e| e.total_files_changed)
 }
 
 /// Returns the % change in changed files compared to previous, or "–" if not available.
-fn get_files_changed_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
-    if cur < 0 {
-        return "–".into();
-    }
-
-    let previous = opt.as_ref().map(|e| e.total_files_changed);
-    match previous {
-        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
-        _ => "–".into(),
-    }
+fn get_files_changed_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
+    get_change_pct(cur, opt, |e| e.total_files_changed)
 }
 
 /// Returns the total number of unmodified files as a string, or "–" if not available.
-fn get_formatted_files_unmodified(opt: &Option<EventTotals>) -> String {
-    opt.as_ref()
-        .map(|e| e.total_files_unmodified.to_string())
-        .unwrap_or_else(|| "–".to_string())
+fn get_formatted_files_unmodified<T: AsEventOpt>(opt: &T) -> String {
+    get_formatted_total(opt, |e| e.total_files_unmodified)
 }
 
 /// Returns the % change in unmodified files compared to previous, or "–" if not available.
-fn get_files_unmodified_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
-    if cur < 0 {
-        return "–".into();
-    }
-
-    let previous = opt.as_ref().map(|e| e.total_files_unmodified);
-    match previous {
-        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
-        _ => "–".into(),
-    }
+fn get_files_unmodified_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
+    get_change_pct(cur, opt, |e| e.total_files_unmodified)
 }
 
+///
+/// DIRECTORY COUNTERS
+/// 
+
 /// Returns the total number of new dirs as a string, or "–" if not available.
-fn get_formatted_dirs_new(opt: &Option<EventTotals>) -> String {
-    opt.as_ref()
-        .map(|e| e.total_dirs_new.to_string())
-        .unwrap_or_else(|| "–".to_string())
+fn get_formatted_dirs_new<T: AsEventOpt>(opt: &T) -> String {
+    get_formatted_total(opt, |e| e.total_dirs_new)
 }
 
 /// Returns the % change in new dirs compared to previous, or "–" if not available.
-fn get_dirs_new_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
-    if cur < 0 {
-        return "–".into();
-    }
-
-    let previous = opt.as_ref().map(|e| e.total_dirs_new);
-    match previous {
-        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
-        _ => "–".into(),
-    }
+fn get_dirs_new_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
+    get_change_pct(cur, opt, |e| e.total_dirs_new)
 }
 
 /// Returns the total number of changed dirs as a string, or "–" if not available.
-fn get_formatted_dirs_changed(opt: &Option<EventTotals>) -> String {
-    opt.as_ref()
-        .map(|e| e.total_dirs_changed.to_string())
-        .unwrap_or_else(|| "–".to_string())
+fn get_formatted_dirs_changed<T: AsEventOpt>(opt: &T) -> String {
+    get_formatted_total(opt, |e| e.total_dirs_changed)
 }
 
 /// Returns the % change in changed dirs compared to previous, or "–" if not available.
-fn get_dirs_changed_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
-    if cur < 0 {
-        return "–".into();
-    }
-
-    let previous = opt.as_ref().map(|e| e.total_dirs_changed);
-    match previous {
-        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
-        _ => "–".into(),
-    }
+fn get_dirs_changed_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
+    get_change_pct(cur, opt, |e| e.total_dirs_changed)
 }
 
 /// Returns the total number of unmodified dirs as a string, or "–" if not available.
-fn get_formatted_dirs_unmodified(opt: &Option<EventTotals>) -> String {
-    opt.as_ref()
-        .map(|e| e.total_dirs_unmodified.to_string())
-        .unwrap_or_else(|| "–".to_string())
+fn get_formatted_dirs_unmodified<T: AsEventOpt>(opt: &T) -> String {
+    get_formatted_total(opt, |e| e.total_dirs_unmodified)
 }
 
 /// Returns the % change in unmodified dirs compared to previous, or "–" if not available.
-fn get_dirs_unmodified_change_pct(cur: i64, opt: &Option<EventTotals>) -> String {
-    if cur < 0 {
-        return "–".into();
-    }
-
-    let previous = opt.as_ref().map(|e| e.total_dirs_unmodified);
-    match previous {
-        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
-        _ => "–".into(),
-    }
+fn get_dirs_unmodified_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
+    get_change_pct(cur, opt, |e| e.total_dirs_unmodified)
 }

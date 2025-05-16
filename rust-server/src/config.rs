@@ -29,6 +29,7 @@ pub struct Config {
     // --- Misc. variables used for email reports ---
     pub server_name: Option<String>,
     pub backrest_url: Option<String>,
+    pub pgadmin_url: Option<String>,
 }
 
 /// One storage mount to track
@@ -91,6 +92,7 @@ impl Config {
         // Optional misc. variables used for email reports
         let server_name = env::var("SERVER_NAME").ok();
         let backrest_url = env::var("BACKREST_URL").ok();
+        let pgadmin_url = env::var("PGADMIN_URL").ok();
 
         Ok(Config {
             database_url,
@@ -105,6 +107,7 @@ impl Config {
             storage_mounts,
             server_name,
             backrest_url,
+            pgadmin_url,
         })
     }
 }
