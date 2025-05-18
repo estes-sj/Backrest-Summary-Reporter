@@ -3,6 +3,7 @@ use std::{env, net::SocketAddr};
 use anyhow::{Context, Result};
 use chrono::Local;
 use dotenv::dotenv;
+use tracing::warn;
 
 /// Application configuration loaded from environment variables.
 #[derive(Clone)]
@@ -29,7 +30,13 @@ pub struct Config {
     // --- Misc. variables used for email reports ---
     pub server_name: Option<String>,
     pub backrest_url: Option<String>,
-    pub pgadmin_url: Option<String>,
+    pub pgadmin_url:  Option<String>,
+
+    // --- Scheduler settings ---
+    /// Cron expression for when to fire the daily report
+    pub email_frequency: String,
+    /// How many hours back to include in the report window
+    pub stats_interval: i64,
 }
 
 /// One storage mount to track
@@ -46,8 +53,10 @@ impl Config {
         dotenv().ok();
 
         // Required variables
-        let database_url = env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
-        let auth_key = env::var("AUTH_KEY").context("AUTH_KEY must be set")?;
+        let database_url = env::var("DATABASE_URL")
+            .context("DATABASE_URL must be set")?;
+        let auth_key = env::var("AUTH_KEY")
+            .context("AUTH_KEY must be set")?;
 
         // Listen address, default to 0.0.0.0:2682
         let listen_addr_str =
@@ -57,14 +66,15 @@ impl Config {
             .context("LISTEN_ADDR must be a valid socket address")?;
 
         // Timezone, default to local
-        let timezone = env::var("TZ").unwrap_or_else(|_| Local::now().offset().to_string());
+        let timezone = env::var("TZ")
+            .unwrap_or_else(|_| Local::now().offset().to_string());
 
         // Optional SMTP / email settings
-        let smtp_host = env::var("SMTP_HOST").ok();
+        let smtp_host     = env::var("SMTP_HOST").ok();
         let smtp_username = env::var("SMTP_USERNAME").ok();
         let smtp_password = env::var("SMTP_PASSWORD").ok();
-        let email_from = env::var("EMAIL_FROM").ok();
-        let email_to = env::var("EMAIL_TO").ok();
+        let email_from    = env::var("EMAIL_FROM").ok();
+        let email_to      = env::var("EMAIL_TO").ok();
 
         // Optional storage mounts
         let mut storage_mounts = Vec::new();
@@ -72,27 +82,34 @@ impl Config {
             let key_path = format!("STORAGE_PATH_{}", idx);
             match env::var(&key_path) {
                 Ok(path) if path.trim().is_empty() => {
-                    // Variable is set but empty: warn and stop processing further mounts
-                    tracing::warn!("{} is set but empty, stopping storage mount configuration. Ensure the specified path is properly mounted.", key_path);
+                    warn!(
+                        "{} is set but empty, stopping storage mount configuration",
+                        key_path
+                    );
                     break;
                 }
                 Ok(path) => {
-                    // Valid path
                     let key_nick = format!("STORAGE_NICK_{}", idx);
                     let nickname = env::var(&key_nick).ok().filter(|s| !s.is_empty());
                     storage_mounts.push(StorageConfig { path, nickname });
                 }
-                Err(_) => {
-                    // No more STORAGE_PATH_N defined, stop
-                    break;
-                }
+                Err(_) => break,
             }
         }
 
         // Optional misc. variables used for email reports
         let server_name = env::var("SERVER_NAME").ok();
         let backrest_url = env::var("BACKREST_URL").ok();
-        let pgadmin_url = env::var("PGADMIN_URL").ok();
+        let pgadmin_url  = env::var("PGADMIN_URL").ok();
+
+        // Scheduler settings
+        // Default to daily at midnight if you don’t set EMAIL_FREQUENCY
+        let email_frequency = env::var("EMAIL_FREQUENCY")
+            .unwrap_or_else(|_| "0 0 * * *".into());
+        // STAT_INTERVAL in hours, default to 24
+        let stats_interval = env::var("STAT_INTERVAL")
+            .map(|v| v.parse::<i64>().unwrap_or(24))
+            .unwrap_or(24);
 
         Ok(Config {
             database_url,
@@ -108,6 +125,8 @@ impl Config {
             server_name,
             backrest_url,
             pgadmin_url,
+            email_frequency,
+            stats_interval,
         })
     }
 }

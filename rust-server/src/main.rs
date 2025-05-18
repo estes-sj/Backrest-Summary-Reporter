@@ -6,12 +6,17 @@ mod html_report;
 mod models;
 
 use std::net::SocketAddr;
-use tokio::net::TcpListener;
-use tracing_subscriber::{fmt, EnvFilter};
+
 use axum::{
     routing::{get, post},
-    Router,
+    Router, serve,
 };
+use chrono::{Utc, Duration as ChronoDuration, Local};
+use reqwest::Client;
+use tokio::net::TcpListener;
+use tokio_cron_scheduler::{Job, JobScheduler};
+use tracing_subscriber::{fmt, EnvFilter};
+
 use config::Config;
 use db::init_db;
 use handlers::{
@@ -33,30 +38,106 @@ async fn main() -> anyhow::Result<()> {
         .with_ansi(false)
         .init();
 
-    // Load configuration (DATABASE_URL, AUTH_KEY, TZ)
+    // Load config & DB
     let cfg = Config::from_env()?;
-
-    // Initialize database and create tables
     let pool = init_db(&cfg.database_url).await?;
 
-    // use cfg to bind first
+    // Spawn the cron scheduler in a background task
+    {
+        let cfg = cfg.clone();
+        let client = Client::new();
+        tokio::spawn(async move {
+            let mut sched = JobScheduler::new();
+
+            sched
+                .add(
+                    Job::new_async(&cfg.email_frequency, move |_uuid, _l| {
+                        // Clone what we need _before_ the async block
+                        let api_key = cfg.auth_key.clone();
+                        let http    = client.clone();
+                        let port    = cfg.listen_addr.port();
+                        let interval = cfg.stats_interval;
+
+                        Box::pin(async move {
+                            // Compute the time window
+                            let end = Utc::now();
+                            let start = end - ChronoDuration::hours(interval);
+
+                            // Build JSON body
+                            let body = serde_json::json!({
+                                "start_date": start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                                "end_date"  : end.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                            });
+
+                            // Compose URL
+                            let url = format!(
+                                "http://localhost:{}/generate-and-send-email-report",
+                                port
+                            );
+
+                            // Fire & forget
+                            if let Err(err) = http
+                                .post(&url)
+                                .header("X-API-Key", api_key)
+                                .json(&body)
+                                .send()
+                                .await
+                            {
+                                tracing::error!(
+                                    "Scheduled report POST failed at {}: {}",
+                                    Local::now().to_rfc3339(),
+                                    err
+                                );
+                            } else {
+                                tracing::info!(
+                                    "Scheduled report triggered at {}",
+                                    Local::now().to_rfc3339()
+                                );
+                            }
+                        })
+                    })
+                    .expect("Invalid cron expression"),
+                )
+                .expect("Failed to add cron job");
+
+            // Kick off the scheduler loop
+            let _ = sched.start();
+        });
+    }
+
+    // Bind TCP listener
     let listener = TcpListener::bind(cfg.listen_addr).await?;
     tracing::info!("Listening on {}", cfg.listen_addr);
 
-    // now move cfg into the router
+    // Build the application router
     let app = Router::new()
         .route("/add-event", post(add_event_handler))
-        .route("/generate-and-send-email-report", post(generate_and_send_email_report))
-        .route("/get-events-and-storage-stats", post(get_events_and_storage_stats_handler))
+        .route(
+            "/generate-and-send-email-report",
+            post(generate_and_send_email_report),
+        )
+        .route(
+            "/get-events-and-storage-stats",
+            post(get_events_and_storage_stats_handler),
+        )
         .route("/get-events-in-range", post(get_events_in_range_handler))
-        .route("/get-events-in-range-totals", post(get_events_in_range_totals_handler))
-        .route("/get-latest-storage-stats", get(get_latest_storage_stats_handler))
+        .route(
+            "/get-events-in-range-totals",
+            post(get_events_in_range_totals_handler),
+        )
+        .route(
+            "/get-latest-storage-stats",
+            get(get_latest_storage_stats_handler),
+        )
         .route("/send-test-email", get(send_test_email_handler))
-        .route("/update-storage-statistics", get(update_storage_statistics_handler))
-        .with_state((pool, cfg));
+        .route(
+            "/update-storage-statistics",
+            get(update_storage_statistics_handler),
+        )
+        .with_state((pool, cfg.clone()));
 
-    // serve
-    axum::serve(
+    // Serve the app with connect-info
+    serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
