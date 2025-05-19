@@ -261,6 +261,37 @@ pub fn write_report_html(path: &str, html: &str) -> Result<(), (StatusCode, &'st
     fs::write(path, html).map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to write report"))
 }
 
+/// Deletes oldest files in `dir_path` until only `max_files` remain.
+/// Expects HTML files (or whatever) in that directory.
+pub fn prune_old_reports(dir_path: &str, max_files: usize) -> std::io::Result<()> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir_path)?
+        .filter_map(|res| res.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|s| s.eq_ignore_ascii_case("html"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    // Sort by file modified time, oldest first
+    entries.sort_by_key(|e| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+
+    // Delete the oldest ones if over limit
+    while entries.len() > max_files {
+        if let Some(entry) = entries.first() {
+            let _ = std::fs::remove_file(entry.path());
+            entries.remove(0);
+        }
+    }
+    Ok(())
+}
+
 ///
 /// HELPER AND FORMATTING METHODS
 /// 

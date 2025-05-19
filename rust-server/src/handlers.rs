@@ -10,7 +10,7 @@ use sqlx::{PgPool, Row};
 use crate::{
     config::{Config,StorageConfig},
     email::{EmailClient},
-    html_report::{format_range_iso_with_offset, render_report_html, write_report_html},
+    html_report::{format_range_iso_with_offset, prune_old_reports, render_report_html, write_report_html},
     models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
 
@@ -214,8 +214,20 @@ pub async fn generate_and_send_email_report(
     let html = render_report_html(&cfg, &report)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    // 4) Write to disk (optional) and send email
-    write_report_html("/reports/latest_report.html", &html)?;
+    // 4) Write to disk under a timestamped name, then prune old ones
+    let now = Local::now();
+    let filename = format!(
+        "/reports/report-{}.html",
+        now.format("%Y-%m-%d_%H-%M-%S_%Z")
+    );
+    write_report_html(&filename, &html)?;
+    let max_files: usize = cfg
+        .retained_reports
+        .try_into()
+        .expect("NUM_RETAINED_REPORTS must be non-negative and fit in usize");
+    prune_old_reports("/reports", max_files)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to prune old reports"))?;
+    
     let client = EmailClient::from_config(&cfg)?;
     client.send_html(&format!("🚀 Backup Summary ({})", format_range_iso_with_offset(req.start_date, req.end_date)), html).await?;
 

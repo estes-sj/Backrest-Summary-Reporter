@@ -85,6 +85,7 @@ services:
       # Email scheduling and report configuration
       EMAIL_FREQUENCY: "${EMAIL_FREQUENCY}"
       STATS_INTERVAL: "${STATS_INTERVAL}"
+      NUM_RETAINED_REPORTS: "${NUM_RETAINED_REPORTS}"
 
       # Storage mount paths and nicknames (these paths must exist in the container)
       # Can supply as many as desired using the naming convention, starting at 1

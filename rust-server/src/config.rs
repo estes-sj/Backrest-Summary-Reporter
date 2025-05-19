@@ -37,6 +37,8 @@ pub struct Config {
     pub email_frequency: String,
     /// How many hours back to include in the report window
     pub stats_interval: i64,
+    /// Number of retained reports
+    pub retained_reports: i64,
 }
 
 /// One storage mount to track
@@ -110,6 +112,10 @@ impl Config {
         let stats_interval = env::var("STAT_INTERVAL")
             .map(|v| v.parse::<i64>().unwrap_or(24))
             .unwrap_or(24);
+        // NUM_RETAINED_REPORTS, default to 10
+        let retained_reports = env::var("NUM_RETAINED_REPORTS")
+            .map(|v| v.parse::<i64>().unwrap_or(10))
+            .unwrap_or(10);
 
         Ok(Config {
             database_url,
@@ -127,6 +133,7 @@ impl Config {
             pgadmin_url,
             email_frequency,
             stats_interval,
+            retained_reports,
         })
     }
 }
