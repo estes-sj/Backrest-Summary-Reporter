@@ -4,6 +4,7 @@ mod email;
 mod handlers;
 mod html_report;
 mod models;
+mod scheduler;
 
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -31,6 +32,10 @@ use handlers::{
     send_test_email_handler,
     update_storage_statistics_handler,
 };
+use scheduler::{
+    spawn_email_report_cron,
+    spawn_storage_update_cron,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -45,84 +50,10 @@ async fn main() -> anyhow::Result<()> {
     let pool = init_db(&cfg.database_url).await?;
 
     // Spawn the cron scheduler in a background task
-    {
-        let cfg = cfg.clone();
-        let client = Client::new();
-        tokio::spawn(async move {
+    spawn_email_report_cron(cfg.clone()).await;
 
-            // Build the cron::Schedule from the same expr
-            let schedule = Schedule::from_str(&cfg.email_frequency)
-                .expect("Invalid cron expression in EMAIL_FREQUENCY");
-
-            // Compute the next upcoming time in the local timezone
-            let next_local: DateTime<Local> = schedule
-                .upcoming(Local)
-                .next()
-                .expect("Unable to compute next schedule");
-            
-            tracing::info!(
-                "System online. Next email report is at {}",
-                next_local.format("%a, %b %e %Y at %I:%M:%S %p %:z")
-            );
-
-            // Build the JobScheduler and add the job
-            let mut sched = JobScheduler::new();
-
-            sched
-                .add(
-                    Job::new_async(&cfg.email_frequency, move |_uuid, _l| {
-                        // Clone what we need _before_ the async block
-                        let api_key = cfg.auth_key.clone();
-                        let http    = client.clone();
-                        let port    = cfg.listen_addr.port();
-                        let interval = cfg.stats_interval;
-
-                        Box::pin(async move {
-                            // Compute the time window
-                            let end = Utc::now();
-                            let start = end - ChronoDuration::hours(interval);
-
-                            // Build JSON body
-                            let body = serde_json::json!({
-                                "start_date": start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                                "end_date"  : end.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                            });
-
-                            // Compose URL
-                            let url = format!(
-                                "http://localhost:{}/generate-and-send-email-report",
-                                port
-                            );
-
-                            // Fire & forget
-                            if let Err(err) = http
-                                .post(&url)
-                                .header("X-API-Key", api_key)
-                                .json(&body)
-                                .send()
-                                .await
-                            {
-                                tracing::error!(
-                                    "Scheduled report POST failed at {}: {}",
-                                    Local::now().to_rfc3339(),
-                                    err
-                                );
-                            } else {
-                                tracing::info!(
-                                    "Scheduled report triggered at {}",
-                                    Local::now().to_rfc3339()
-                                );
-                            }
-                        })
-                    })
-                    .expect("Invalid cron expression"),
-                )
-                .expect("Failed to add cron job");
-
-            // Kick off the scheduler loop
-            let _ = sched.start();
-        });
-    }
+    // Kick off storage update scheduler
+    spawn_storage_update_cron(cfg.clone()).await;
 
     // Bind TCP listener
     let listener = TcpListener::bind(cfg.listen_addr).await?;
