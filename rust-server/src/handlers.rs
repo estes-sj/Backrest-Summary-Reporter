@@ -217,8 +217,7 @@ pub async fn generate_and_send_email_report(
     // 4) Write to disk (optional) and send email
     write_report_html("/reports/latest_report.html", &html)?;
     let client = EmailClient::from_config(&cfg)?;
-    // TODO: Uncomment when complete
-    //client.send_html(&format!("🚀 Backup Summary ({})", format_range_iso_with_offset(req.start_date, req.end_date)), html).await?;
+    client.send_html(&format!("🚀 Backup Summary ({})", format_range_iso_with_offset(req.start_date, req.end_date)), html).await?;
 
     Ok((StatusCode::OK, "Report email sent"))
 }

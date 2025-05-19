@@ -1,4 +1,12 @@
 .env
+
+db/
+
+# Custom compose files
+docker-compose-*.yaml
+!docker-examples
+!docker-examples/**
+
 logs/
 rclone/
 reports/

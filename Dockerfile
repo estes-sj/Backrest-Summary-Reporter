@@ -8,6 +8,7 @@ RUN apt-get update \
       build-essential \
       pkg-config \
       libssl-dev \
+      tzdata \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/rust-server

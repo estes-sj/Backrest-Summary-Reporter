@@ -2,7 +2,7 @@ use axum::{
     http::StatusCode,
 };
 use chrono::{DateTime, Local, Offset, TimeZone};
-use std::{fs, path::Path, borrow::Borrow};
+use std::{fs, path::Path};
 
 use crate::{
     config::Config,
