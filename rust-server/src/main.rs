@@ -6,12 +6,14 @@ mod html_report;
 mod models;
 
 use std::net::SocketAddr;
+use std::str::FromStr;
 
 use axum::{
     routing::{get, post},
     Router, serve,
 };
-use chrono::{Utc, Duration as ChronoDuration, Local};
+use chrono::{Utc, DateTime, Duration as ChronoDuration, Local};
+use cron::Schedule;
 use reqwest::Client;
 use tokio::net::TcpListener;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -47,6 +49,23 @@ async fn main() -> anyhow::Result<()> {
         let cfg = cfg.clone();
         let client = Client::new();
         tokio::spawn(async move {
+
+            // Build the cron::Schedule from the same expr
+            let schedule = Schedule::from_str(&cfg.email_frequency)
+                .expect("Invalid cron expression in EMAIL_FREQUENCY");
+
+            // Compute the next upcoming time in the local timezone
+            let next_local: DateTime<Local> = schedule
+                .upcoming(Local)
+                .next()
+                .expect("Unable to compute next schedule");
+            
+            tracing::info!(
+                "System online. Next email report is at {}",
+                next_local.format("%a, %b %e %Y at %I:%M:%S %p %:z")
+            );
+
+            // Build the JobScheduler and add the job
             let mut sched = JobScheduler::new();
 
             sched
