@@ -17,10 +17,16 @@ pub async fn spawn_email_report_cron(cfg: Config) {
         // 1) Preview next run via `cron::Schedule`
         let schedule = Schedule::from_str(&cfg.email_frequency)
             .expect("Invalid cron expression in EMAIL_FREQUENCY");
-        let next_local: DateTime<Local> = schedule
-            .upcoming(Local)
+
+        // Pull the next run in UTC
+        let next_utc: DateTime<Utc> = schedule
+            .upcoming(Utc)
             .next()
             .expect("Unable to compute next schedule");
+
+        // Convert to local zone for display
+        let next_local: DateTime<Local> = next_utc.with_timezone(&Local);
+
         info!(
             "System online. Next email report is at {}",
             next_local.format("%a, %b %e %Y at %I:%M:%S %p %:z")
@@ -82,16 +88,21 @@ pub async fn spawn_storage_update_cron(cfg: Config) {
     // clone for the task
     let cfg = cfg.clone();
     let http = Client::new();
-
     tokio::spawn(async move {
         // 1) Preview next run
         let expr = "0 0 0 * * *"; // quartz 6-field: sec=0, min=0, hour=0, daily
         let schedule = Schedule::from_str(expr)
             .expect("Invalid cron expression for storage update");
-        let next_local: DateTime<Local> = schedule
-            .upcoming(Local)
+        
+        // Pull the next run in UTC
+        let next_utc: DateTime<Utc> = schedule
+            .upcoming(Utc)
             .next()
-            .expect("Cannot compute next storage update run");
+            .expect("Unable to compute next schedule");
+
+        // Convert to local zone for display
+        let next_local: DateTime<Local> = next_utc.with_timezone(&Local);
+
         info!(
             "Next storage stats update is at {}",
             next_local.format("%a, %b %e %Y at %I:%M:%S %p %:z")
