@@ -8,8 +8,13 @@ use fs2::{free_space, total_space};
 use std::{fs, net::SocketAddr};
 use sqlx::{PgPool, Row};
 use crate::{
-    config::{Config,StorageConfig},
+    fail, ok,
+    config::{Config},
     email::{EmailClient},
+    healthcheck::{
+        ping_healthcheck,
+        HealthStatus
+    },
     html_report::{format_range_iso_with_offset, prune_old_reports, render_report_html, write_report_html},
     models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
 };
@@ -118,14 +123,17 @@ pub async fn update_storage_statistics_handler(
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    ping_healthcheck(&cfg.healthcheck_url, HealthStatus::Start, Some(""));
+
     // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
     // 2) Delegate insertion & report generation
-    let reports = load_and_insert_storage_stats(&pool, &cfg.storage_mounts).await?;
+    let reports = load_and_insert_storage_stats(&pool, &cfg).await?;
 
     // 3) Log & return
-    tracing::info!("Storage statistics updated from {}.", addr);
+    ok!(cfg, "Storage statistics updated from {}.", addr);
+
     Ok((StatusCode::OK, Json(reports)))
 }
 
@@ -140,7 +148,7 @@ pub async fn get_latest_storage_stats_handler(
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
     // 2) Delegate to our new helper
-    let stats = load_storage_stats(&pool, &cfg.storage_mounts).await?;
+    let stats = load_storage_stats(&pool, &cfg).await?;
 
     // 3) Return JSON
     Ok((StatusCode::OK, Json(stats)))
@@ -167,10 +175,10 @@ pub async fn get_events_and_storage_stats_handler(
     let snapshot_summaries = fetch_combined_stats(&pool, req.start_date, req.end_date).await?;
 
     // 4) Trigger an update to update the storage statistics
-    load_and_insert_storage_stats(&pool, &cfg.storage_mounts).await?;
+    load_and_insert_storage_stats(&pool, &cfg).await?;
     
     // 5) Get latest storage statistics
-    let storage_statistics = load_storage_stats(&pool, &cfg.storage_mounts).await?;
+    let storage_statistics = load_storage_stats(&pool, &cfg).await?;
     
     // 6) Return the combined report
     let payload = GenerateReport {
@@ -201,8 +209,8 @@ pub async fn generate_and_send_email_report(
     // 2) Gather all pieces of the report
     let event_totals       = load_event_totals_report(&pool, req.start_date, req.end_date).await?;
     let snapshot_summaries = fetch_combined_stats(&pool, req.start_date, req.end_date).await?;
-    load_and_insert_storage_stats(&pool, &cfg.storage_mounts).await?;
-    let storage_stats      = load_storage_stats(&pool, &cfg.storage_mounts).await?;
+    load_and_insert_storage_stats(&pool, &cfg).await?;
+    let storage_stats      = load_storage_stats(&pool, &cfg).await?;
 
     let report = GenerateReport {
         event_totals,
@@ -471,8 +479,9 @@ pub async fn load_event_totals_report(
 /// Stats all mounts, inserts into the DB, and returns the summaries.
 pub async fn load_and_insert_storage_stats(
     pool: &PgPool,
-    mounts: &[StorageConfig],
+    cfg: &Config,
 ) -> Result<Vec<StorageReport>, (StatusCode, &'static str)> {
+    let mounts = &cfg.storage_mounts;
     let mut reports = Vec::with_capacity(mounts.len());
 
     for mount in mounts {
@@ -481,12 +490,23 @@ pub async fn load_and_insert_storage_stats(
 
         // filesystem stats
         let total_bytes = total_space(path).map_err(|e| {
-            tracing::error!("stat total {} failed: {}", path, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
+            fail!(
+                cfg,
+                "Filesystem stat failed",
+                "stat total {} failed: {}",
+                path,
+                e
+            )
         })?;
+
         let free_bytes = free_space(path).map_err(|e| {
-            tracing::error!("stat free {} failed: {}", path, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Filesystem stat error")
+            fail!(
+                cfg,
+                "Filesystem stat failed",
+                "stat free {} failed: {}",
+                path,
+                e
+            )
         })?;
         let used_bytes = total_bytes.saturating_sub(free_bytes);
 
@@ -508,8 +528,13 @@ pub async fn load_and_insert_storage_stats(
         .execute(pool)
         .await
         .map_err(|e| {
-            tracing::error!("DB insert {} failed: {}", path, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+            fail!(
+                cfg,
+                "DB error",
+                "DB insert {} failed: {}",
+                path,
+                e
+            )
         })?;
 
         reports.push(StorageReport {
@@ -526,8 +551,10 @@ pub async fn load_and_insert_storage_stats(
 /// Fetches *all* current + prior (day/week/month) stats for the given mounts.
 pub async fn load_storage_stats(
     pool: &PgPool,
-    mounts: &[StorageConfig],
+    cfg: &Config,
 ) -> Result<Vec<CurrentStorageStats>, (StatusCode, &'static str)> {
+    let mounts = &cfg.storage_mounts;
+
     // 1) Grab the latest row for each mount
     let current_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
         r#"
@@ -544,8 +571,12 @@ pub async fn load_storage_stats(
     .fetch_all(pool)
     .await
     .map_err(|e| {
-        tracing::error!("DB query error for current storage: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+        fail!(
+            cfg,
+            "DB query error",
+            "current storage: {}",
+            e
+        )
     })?;
 
     // 2) Prepare a helper for fetching the most recent before a cutoff
@@ -605,8 +636,14 @@ pub async fn load_storage_stats(
                 priors[i] = fetch_prior(pool, &mount.path, cutoff)
                     .await
                     .map_err(|e| {
-                        tracing::error!("DB fetch prior for {} cutoff {:?}: {}", mount.path, cutoff, e);
-                        (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+                        fail!(
+                            cfg,
+                            "DB error",
+                            "DB fetch prior for {} cutoff {:?}: {}",
+                            mount.path,
+                            cutoff,
+                            e
+                        )
                     })?;
             }
 

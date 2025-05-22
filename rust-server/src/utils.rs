@@ -1,0 +1,72 @@
+use axum::http::StatusCode;
+
+/// Log a failure, ping healthcheck(fail) with a combined message of
+/// **static** + **formatted** details, but return only the static part
+/// to the HTTP handler.
+///
+/// # Parameters
+/// - `cfg`
+///     Your application `Config`, so we can grab `cfg.healthcheck_url`.
+/// - `static_msg`
+///     A **`&'static str`** that will be returned to the HTTP caller.
+/// - `format_args...`
+///     A `format!`-style string plus any arguments to build the **detailed** part.
+///
+/// # Usage
+/// ```ignore
+/// .map_err(|e| {
+///     fail!(
+///         cfg,
+///         "db error",                      // <-- static to client
+///         "DB insert {} failed: {}",       // <-- detailed for logs/ping
+///         path,
+///         e
+///     )
+/// })?
+/// ```
+#[macro_export]
+macro_rules! fail {
+    ($cfg:expr, $static_msg:expr, $fmt:expr, $($arg:tt)+) => {{
+        // build detailed message
+        let detail = format!($fmt, $($arg)+);
+        // combine with the static prefix
+        let combined = format!("{}: {}", $static_msg, detail);
+        tracing::error!("{}", combined);
+        crate::healthcheck::ping_healthcheck(
+            &$cfg.healthcheck_url,
+            crate::healthcheck::HealthStatus::Fail,
+            Some(&combined),
+        );
+        // return only the static part for the HTTP response
+        (StatusCode::INTERNAL_SERVER_ERROR, $static_msg)
+    }};
+}
+
+/// Log an info, ping healthcheck(success) with a combined message of
+/// **static** `"ok"` plus **formatted** details, but return nothing.
+///
+/// # Parameters
+/// - `cfg`
+///     Your application `Config`.
+/// - `format_args...`
+///     A `format!`-style string plus any arguments to build the message.
+///
+/// # Usage
+/// ```ignore
+/// ok!(cfg, "processed {} items in {:.2}s", count, elapsed_secs);
+/// ```
+#[macro_export]
+macro_rules! ok {
+    ($cfg:expr, $fmt:expr, $($arg:tt)+) => {{
+        // build detailed message
+        let detail = format!($fmt, $($arg)+);
+        // combine with a fixed "ok" prefix
+        let combined = format!("ok: {}", detail);
+        tracing::info!("{}", combined);
+        crate::healthcheck::ping_healthcheck(
+            &$cfg.healthcheck_url,
+            crate::healthcheck::HealthStatus::Success,
+            Some(&combined),
+        );
+    }};
+}

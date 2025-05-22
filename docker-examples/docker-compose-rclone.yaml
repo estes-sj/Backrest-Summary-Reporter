@@ -87,6 +87,9 @@ services:
       STATS_INTERVAL: "${STATS_INTERVAL}"
       NUM_RETAINED_REPORTS: "${NUM_RETAINED_REPORTS}"
 
+      # Healthchecks ping url for API status
+      HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
+
       # Storage mount paths and nicknames (these paths must exist in the container)
       # Can supply as many as desired using the naming convention, starting at 1
       # Paths are the path inside the container, which is the right side of the :

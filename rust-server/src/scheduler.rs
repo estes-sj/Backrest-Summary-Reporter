@@ -4,8 +4,11 @@ use reqwest::Client;
 use std::str::FromStr;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{info, error};
+use crate::{
+    fail, ok,
+    config::Config,
+};
 
-use crate::config::Config;
 
 /// Spawns a cron job that calls the `/generate-and-send-email-report` endpoint.
 pub async fn spawn_email_report_cron(cfg: Config) {
@@ -27,7 +30,8 @@ pub async fn spawn_email_report_cron(cfg: Config) {
         // Convert to local zone for display
         let next_local: DateTime<Local> = next_utc.with_timezone(&Local);
 
-        info!(
+        ok!(
+            cfg,
             "System online. Next email report is at {}",
             next_local.format("%a, %b %e %Y at %I:%M:%S %p %:z")
         );

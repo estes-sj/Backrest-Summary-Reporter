@@ -36,6 +36,9 @@ services:
       EMAIL_FROM: ${EMAIL_FROM}
       EMAIL_TO: ${EMAIL_TO}
 
+      # Healthchecks ping url for API status
+      HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
+
       # Email scheduling and report configuration
       EMAIL_FREQUENCY: "${EMAIL_FREQUENCY}"
       STATS_INTERVAL: "${STATS_INTERVAL}"

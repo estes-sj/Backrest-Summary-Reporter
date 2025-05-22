@@ -2,22 +2,19 @@ mod config;
 mod db;
 mod email;
 mod handlers;
+mod healthcheck;
 mod html_report;
 mod models;
 mod scheduler;
+mod utils;
 
 use std::net::SocketAddr;
-use std::str::FromStr;
 
 use axum::{
     routing::{get, post},
     Router, serve,
 };
-use chrono::{Utc, DateTime, Duration as ChronoDuration, Local};
-use cron::Schedule;
-use reqwest::Client;
 use tokio::net::TcpListener;
-use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing_subscriber::{fmt, EnvFilter};
 
 use config::Config;

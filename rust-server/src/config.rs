@@ -24,6 +24,9 @@ pub struct Config {
     pub email_from: Option<String>,
     pub email_to: Option<String>,
 
+    // --- Healthcheck settings (optional) ---
+    pub healthcheck_url: Option<String>,
+
     // --- Storage mounts to monitor ---
     pub storage_mounts: Vec<StorageConfig>,
 
@@ -99,6 +102,9 @@ impl Config {
             }
         }
 
+        // Optional healthchecks URL for status updates
+        let healthcheck_url = env::var("HEALTHCHECK_PING_URL").ok();
+
         // Optional misc. variables used for email reports
         let server_name = env::var("SERVER_NAME").ok();
         let backrest_url = env::var("BACKREST_URL").ok();
@@ -127,6 +133,7 @@ impl Config {
             smtp_password,
             email_from,
             email_to,
+            healthcheck_url,
             storage_mounts,
             server_name,
             backrest_url,
