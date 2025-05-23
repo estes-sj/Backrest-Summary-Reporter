@@ -24,11 +24,20 @@ services:
       - /dev/fuse # Expose FUSE device
     security_opt:
       - apparmor:unconfined # Unconfine AppArmor to allow FUSE mount
+    environment:
+      RCLONE_REMOTE: "${RCLONE_REMOTE}"   # e.g. "google_drive:"
+      RCLONE_TARGET: "${RCLONE_TARGET}"   # e.g. "/mnt-rclone/google_drive"
     volumes:
       # Config volume for rclone.conf
       - type: bind
         source: ./rclone/config
         target: /config/rclone
+
+      # Config volume for entrypoint.sh
+      - type: bind
+        source: ./rclone/entrypoint.sh
+        target: /entrypoint.sh
+        read_only: true
 
       # Optional: cache directory for VFS (improves stability/performance)
       - type: bind
@@ -43,13 +52,7 @@ services:
         target: /mnt-rclone/google_drive
         bind:
           propagation: shared  # Allow mount propagation between containers
-    command: >
-      mount google_drive: /mnt-rclone/google_drive
-      --config=/config/rclone/rclone.conf
-      --allow-other
-      --allow-non-empty
-      --vfs-cache-mode writes
-      --cache-dir /config/rclone/vfs-cache
+    entrypoint: ["sh", "/entrypoint.sh"]
     healthcheck:
       test: ["CMD-SHELL", "grep -q ' /mnt-rclone/google_drive ' /proc/mounts"]
       interval: 5s
@@ -127,4 +130,6 @@ services:
         target: /mnt-rclone/google_drive
         bind:
           propagation: shared      # Required to see FUSE mounts
+    cap_add:
+      - SYS_ADMIN                  # For FUSE mounts
     restart: unless-stopped

@@ -8,6 +8,10 @@ docker-compose-*.yaml
 !docker-examples/**
 
 logs/
-rclone/
+
+# Rclone
+rclone/*
+!rclone/entrypoint.sh
+
 reports/
 tests/
