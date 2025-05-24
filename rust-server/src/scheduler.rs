@@ -87,13 +87,45 @@ pub async fn spawn_email_report_cron(cfg: Config) {
     });
 }
 
-/// Spawns a daily-at-midnight cron job that calls the `/update-storage-statistics` endpoint.
+/// Spawns a daily-at-midnight cron job that calls the `/update-storage-statistics` endpoint,
+/// and also triggers one immediate run on startup.
 pub async fn spawn_storage_update_cron(cfg: Config) {
     // clone for the task
     let cfg = cfg.clone();
     let http = Client::new();
+
     tokio::spawn(async move {
-        // 1) Preview next run
+        let port = cfg.listen_addr.port();
+        let url = format!("http://localhost:{}/update-storage-statistics", port);
+        let ts_fmt = "%a, %b %e %Y at %I:%M:%S %p %:z";
+
+        // Immediate storage stats update
+        {
+            let api_key = cfg.auth_key.clone();
+            let now = Local::now().format(ts_fmt).to_string();
+
+            match http
+                .get(&url)
+                .header("X-API-Key", api_key)
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    info!("Startup storage stats update succeeded at {}", now);
+                }
+                Ok(resp) => error!(
+                    "Startup storage stats update returned {} at {}",
+                    resp.status(),
+                    now
+                ),
+                Err(e) => error!(
+                    "Startup storage stats update failed at {}: {}",
+                    now, e
+                ),
+            }
+        }
+
+        // Preview next run
         let expr = "0 0 0 * * *"; // quartz 6-field: sec=0, min=0, hour=0, daily
         let schedule = Schedule::from_str(expr)
             .expect("Invalid cron expression for storage update");
@@ -109,25 +141,21 @@ pub async fn spawn_storage_update_cron(cfg: Config) {
 
         info!(
             "Next storage stats update is at {}",
-            next_local.format("%a, %b %e %Y at %I:%M:%S %p %:z")
+            next_local.format(ts_fmt)
         );
 
-        // 2) Build scheduler
+        // Build scheduler
         let mut sched = JobScheduler::new();
 
-        // 3) Build and add the job
+        // Build and add the job
         let job = Job::new_async(expr, move |_uuid, _l| {
             // clone inside closure
             let api_key = cfg.auth_key.clone();
             let http    = http.clone();
-            let port    = cfg.listen_addr.port();
+            let url     = url.clone();
 
             Box::pin(async move {
-                let url = format!(
-                    "http://localhost:{}/update-storage-statistics",
-                    port
-                );
-
+                let now = Local::now().format(&ts_fmt).to_string();
                 match http
                     .get(&url)
                     .header("X-API-Key", api_key)
@@ -135,17 +163,16 @@ pub async fn spawn_storage_update_cron(cfg: Config) {
                     .await
                 {
                     Ok(resp) if resp.status().is_success() => {
-                        info!("Storage stats update succeeded at {}", Local::now().to_rfc3339())
+                        info!("Storage stats update succeeded at {}", now)
                     },
                     Ok(resp) => error!(
                         "Storage stats update returned {} at {}",
                         resp.status(),
-                        Local::now().to_rfc3339()
+                        now
                     ),
                     Err(e) => error!(
                         "Storage stats update POST failed at {}: {}",
-                        Local::now().to_rfc3339(),
-                        e
+                        now, e
                     ),
                 }
             })
@@ -154,7 +181,7 @@ pub async fn spawn_storage_update_cron(cfg: Config) {
 
         sched.add(job).expect("Failed to add storage update cron job");
 
-        // 4) Start the scheduler loop
+        // Start the scheduler loop
         sched.start().await.expect("Scheduler failed to start");
     });
 }

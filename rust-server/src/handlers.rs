@@ -123,7 +123,6 @@ pub async fn update_storage_statistics_handler(
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    ping_healthcheck(&cfg.healthcheck_url, HealthStatus::Start, Some(""));
 
     // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
