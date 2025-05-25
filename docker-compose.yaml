@@ -1,12 +1,12 @@
 services:
   # PostgreSQL Database for storing backup metadata and statistics
-  backrest-listener-db:
+  backrest-reporter-db:
     image: postgres:17
-    container_name: backrest-listener-db
+    container_name: backrest-reporter-db
     environment:
       POSTGRES_USER: ${DB_USERNAME}      # Username from .env
       POSTGRES_PASSWORD: ${DB_PASSWORD}  # Password from .env
-      POSTGRES_DB: backrest-listener-db  # Database name
+      POSTGRES_DB: backrest-reporter-db  # Database name
     volumes:
       - ./db:/var/lib/postgresql/data   # Host ./db directory  
     ports:
@@ -14,16 +14,16 @@ services:
     restart: unless-stopped
 
   # Main Rust API service that checks mount status, manages backups, and sends emails
-  backrest-listener:
+  backrest-reporter:
     build:
       context: .                        # Path to project root 
       dockerfile: Dockerfile            # Dockerfile to build from
-    container_name: backrest-listener
+    container_name: backrest-reporter
     depends_on:
-      backrest-listener-db:
+      backrest-reporter-db:
         condition: service_started      # Wait for database to be available
     environment:
-      DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-listener-db/backrest-listener-db
+      DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-reporter-db/backrest-reporter-db
       TZ: ${TZ}                         # Set container timezone
       AUTH_KEY: ${AUTH_KEY}             # API authentication key
       RUST_LOG: info                    # Logging verbosity
