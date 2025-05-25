@@ -42,8 +42,8 @@ macro_rules! fail {
     }};
 }
 
-/// Log an info, ping healthcheck(success) with a combined message of
-/// **static** `"ok"` plus **formatted** details, but return nothing.
+/// Log an info, ping healthcheck(success) with a message of
+/// **formatted** details, but return nothing.
 ///
 /// # Parameters
 /// - `cfg`
@@ -60,12 +60,41 @@ macro_rules! ok {
     ($cfg:expr, $fmt:expr, $($arg:tt)+) => {{
         // build detailed message
         let detail = format!($fmt, $($arg)+);
-        // combine with a fixed "ok" prefix
-        let combined = format!("ok: {}", detail);
+        // combine with a fixed "Success" prefix
+        let combined = format!("Success: {}", detail);
         tracing::info!("{}", combined);
         crate::healthcheck::ping_healthcheck(
             &$cfg.healthcheck_url,
             crate::healthcheck::HealthStatus::Success,
+            Some(&combined),
+        );
+    }};
+}
+
+/// Ping healthcheck(success) with a message of
+/// **formatted** details, but return nothing.
+///
+/// # Parameters
+/// - `cfg`
+///     Your application `Config`.
+/// - `format_args...`
+///     A `format!`-style string plus any arguments to build the message.
+///
+/// # Usage
+/// ```ignore
+/// start!(cfg, "starting report process for {} to {}", start_date, end_date);
+/// ```
+#[macro_export]
+macro_rules! start {
+    ($cfg:expr, $fmt:expr, $($arg:tt)+) => {{
+        // build detailed message
+        let detail = format!($fmt, $($arg)+);
+        // combine with a fixed "Start" prefix
+        let combined = format!("Start: {}", detail);
+        tracing::info!("{}", combined);
+        crate::healthcheck::ping_healthcheck(
+            &$cfg.healthcheck_url,
+            crate::healthcheck::HealthStatus::Start,
             Some(&combined),
         );
     }};

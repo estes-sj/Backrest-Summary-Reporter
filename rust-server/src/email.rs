@@ -3,7 +3,10 @@ use lettre::{
     transport::smtp::{authentication::Credentials, AsyncSmtpTransport},
     AsyncTransport, Tokio1Executor, Message,
 };
-use crate::config::Config;
+use crate::{
+    fail, ok, start,
+    config::{Config},
+};
 use axum::http::StatusCode;
 use std::str::FromStr;
 
@@ -17,18 +20,15 @@ impl EmailClient {
     /// Build an EmailClient from your Config, or return the appropriate axum error.
     pub fn from_config(cfg: &Config) -> Result<Self, (StatusCode, &'static str)> {
         let host = cfg.smtp_host.as_deref().ok_or_else(|| {
-            tracing::error!("SMTP_HOST not configured");
-            (StatusCode::INTERNAL_SERVER_ERROR, "SMTP not configured")
+            fail!(cfg, "SMTP config error", "SMTP_HOST not configured{}", "")
         })?;
         let user = cfg.smtp_username.clone().unwrap_or_default();
         let pass = cfg.smtp_password.clone().unwrap_or_default();
         let from_addr = cfg.email_from.as_deref().ok_or_else(|| {
-            tracing::error!("EMAIL_FROM not configured");
-            (StatusCode::INTERNAL_SERVER_ERROR, "SMTP not configured")
+            fail!(cfg, "SMTP config error", "EMAIL_FROM not configured{}", "")
         })?;
         let to_addr = cfg.email_to.as_deref().ok_or_else(|| {
-            tracing::error!("EMAIL_TO not configured");
-            (StatusCode::INTERNAL_SERVER_ERROR, "SMTP not configured")
+            fail!(cfg, "SMTP config error", "EMAIL_TO not configured{}", "")
         })?;
 
         let from = Mailbox::from_str(from_addr).expect("valid EMAIL_FROM");
@@ -37,8 +37,7 @@ impl EmailClient {
         let creds  = Credentials::new(user, pass);
         let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(host)
             .map_err(|e| {
-                tracing::error!("SMTP relay config failed: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "SMTP config error")
+                fail!(cfg, "SMTP config error", "SMTP relay config failed: {}", e)
             })?
             .credentials(creds)
             .build();
@@ -51,6 +50,7 @@ impl EmailClient {
         &self,
         subject: &str,
         html_body: String,
+        cfg: &Config,
     ) -> Result<(), (StatusCode, &'static str)> {
         let email = Message::builder()
             .from(self.from.clone())
@@ -59,17 +59,15 @@ impl EmailClient {
             .subject(subject)
             .body(html_body)
             .map_err(|e| {
-                tracing::error!("Failed to build email: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Email build error")
+                fail!(cfg, "Email build error", "Failed to build email: {}", e)
             })?;
 
         self.mailer
             .send(email)
             .await
             .map_err(|e| {
-                tracing::error!("Failed to send email: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send email")
+                fail!(cfg, "Email send error", "Failed to send email: {}", e)
             })
-            .map(|_| tracing::info!("Email '{}' sent successfully to {:?}", subject, self.to))
+            .map(|_| ok!(cfg, "Email '{}' sent successfully to {:?}", subject, self.to))
     }
 }
