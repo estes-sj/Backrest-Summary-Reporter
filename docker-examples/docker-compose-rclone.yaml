@@ -8,7 +8,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}  # Password from .env
       POSTGRES_DB: backrest-reporter-db  # Database name
     volumes:
-      - ./db:/var/lib/postgresql/data   # Host ./db directory  
+      - ./db:/var/lib/postgresql/data   # Host ./db directory
+      - ./backups:/backups              # Mount host's ./backups dir
     ports:
       - "57432:5432" # Expose PostgreSQL for local development/debug
     restart: unless-stopped

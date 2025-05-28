@@ -37,7 +37,7 @@ The storages that are checked are defined in the `.env`'s `STORAGE_PATH_N`. See 
 ```mermaid
 flowchart TD
     A["Cron Schedule"]
-    A -->|"Default: `0 0 * * *`"| B["Storage Check Trigger"]
+    A -->|"Default: 0 0 * * *"| B["Storage Check Trigger"]
     B --> C["Execute Storage Check"]
     C -->|"/storage_stats Endpoint"| D{"Get and Save Storage Stats"}
 
@@ -190,7 +190,7 @@ To enable email reporting, you must configure the SMTP settings in the `.env` fi
 
 Gmail provides SMTP access for sending emails from external applications. Follow these steps to configure it:
 
-### 1. **Enable App Passwords (Required for Gmail)**
+#### 1. **Enable App Passwords (Required for Gmail)**
 
 If you have 2-Step Verification enabled (highly recommended), you must create an [App Password](https://myaccount.google.com/apppasswords):
 
@@ -203,7 +203,7 @@ If you have 2-Step Verification enabled (highly recommended), you must create an
 > [!IMPORTANT]
 > Do not use your main Gmail password for SMTP; always use an app password.
 
-### 2. **Configure `.env` SMTP Settings**
+#### 2. **Configure `.env` SMTP Settings**
 
 Update your `.env` file with the following keys:
 
@@ -224,7 +224,7 @@ EMAIL_TO=receiver_email@example.com
 * `EMAIL_FROM` is the name shown in the email “From” field
 * `EMAIL_TO` is the comma-separated list of recipient email addresses
 
-### 3. **Test Your Setup**
+#### 3. **Test Your Setup**
 
 Once set up, trigger a test email via the [`/send-test-email` endpoint](#send-test-email):
 
@@ -397,6 +397,128 @@ Setting this up is useful for catching failed endpoints and successful scheduled
 </p>
 
 Since the storage stats update runs daily, the recommended period is ***1 day*** with a grace period of ***1 hour***.
+
+## Backup and Restoring Database
+
+### Backing Up (SQL File)
+
+Assuming you’ve already `cd`ed into the folder with your `docker-compose.yaml` and your `.env` (containing `DB_USERNAME` and `DB_PASSWORD`), follow the instructions below for backing up.
+
+1. **Run the dump** (writes `backrest-reporter-db.sql` into your `./backups` directory):
+   ```bash
+   docker exec \
+     -e PGPASSWORD="$DB_PASSWORD" \
+     backrest-reporter-db \
+     pg_dump \
+       -U "$DB_USERNAME" \
+       -d backrest-reporter-db \
+     > ./backups/backrest-reporter-db_$(date +%F).sql
+   ```
+   * `-e PGPASSWORD=…` injects your password so `pg_dump` won’t prompt you.
+   * `-U "$DB_USERNAME"` uses the same user you set in your `.env`.
+   * `-d backrest-reporter-db` is the database name you set with `POSTGRES_DB`.
+   * The `> ./backups/...` on the host side writes the output into your new `backups` folder, with today’s date in the filename.
+2. **Verify**:
+   ```bash
+   ls -lh ./backups/backrest-reporter-db_*.sql
+   head -n 20 ./backups/backrest-reporter-db_$(date +%F).sql
+   ```
+
+### Backing Up (Compressed Dump File)
+
+Replace step 1 of [the previous instructions](#backing-up-sql-file) with:
+
+```bash
+docker exec \
+  -e PGPASSWORD="$DB_PASSWORD" \
+  backrest-reporter-db \
+  pg_dump \
+    -U "$DB_USERNAME" \
+    -d backrest-reporter-db \
+    -F c -b -v \
+  > ./backups/backrest-reporter-db_$(date +%F).dump
+```
+* `-F c` → custom (compressed)
+* `-b` → include large objects
+* `-v` → verbose logging
+
+### Resetting and Restoring the Backrest Reporter Database
+
+1. Stop the backrest-reporter container
+  ```bash
+  docker stop backrest-reporter
+  ```
+
+2. Set your environment variables
+  ```bash
+  export DB_CONTAINER=backrest-reporter-db
+  export DB_NAME=backrest-reporter-db
+  export DB_USERNAME=<your_db_username>
+  export DB_PASSWORD=<your_db_password>
+  export DUMP_FILE=/backups/backrest-reporter-db_YYYY_MM_DD.dump
+  ```
+
+3. Terminate active connections
+  ```bash
+  docker exec \
+    -e PGPASSWORD="$DB_PASSWORD" \
+    $DB_CONTAINER \
+    psql -U "$DB_USERNAME" -d postgres \
+    -c "SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = '$DB_NAME'
+          AND pid <> pg_backend_pid();"
+  ```
+
+4. Drop & recreate the database
+  ```bash
+  docker exec \
+    -e PGPASSWORD="$DB_PASSWORD" \
+    $DB_CONTAINER \
+    psql -U "$DB_USERNAME" -d postgres \
+    -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"
+
+  docker exec \
+    -e PGPASSWORD="$DB_PASSWORD" \
+    $DB_CONTAINER \
+    psql -U "$DB_USERNAME" -d postgres \
+    -c "CREATE DATABASE \"$DB_NAME\";"
+  ```
+
+5. Restore from dump
+  ```bash
+  docker exec \
+    -e PGPASSWORD="$DB_PASSWORD" \
+    $DB_CONTAINER \
+    pg_restore \
+      -U "$DB_USERNAME" \
+      -d "$DB_NAME" \
+      "$DUMP_FILE"
+  ```
+
+### Restoring Later (Template)
+
+When you need to restore in the future, just update the variables and dump filename:
+
+```bash
+export DB_CONTAINER=backrest-reporter-db
+export DB_NAME=backrest-reporter-db
+export DB_USERNAME=<your_db_username>
+export DB_PASSWORD=<your_db_password>
+export DUMP_FILE=/backups/backrest-reporter-db_YYYY_MM_DD.dump
+
+# (Optional) Clean slate:
+docker exec -e PGPASSWORD="$DB_PASSWORD" $DB_CONTAINER psql -U "$DB_USERNAME" -d postgres \
+  -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"
+docker exec -e PGPASSWORD="$DB_PASSWORD" $DB_CONTAINER psql -U "$DB_USERNAME" -d postgres \
+  -c "CREATE DATABASE \"$DB_NAME\";"
+
+# Restore:
+docker exec -e PGPASSWORD="$DB_PASSWORD" $DB_CONTAINER pg_restore \
+  -U "$DB_USERNAME" \
+  -d "$DB_NAME" \
+  "$DUMP_FILE"
+```
 
 ## API Endpoints
 
