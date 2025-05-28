@@ -13,62 +13,15 @@ services:
       - "57432:5432" # Expose PostgreSQL for local development/debug
     restart: unless-stopped
 
-  # Rclone container that handles mounting Google Drive via FUSE
-  rclone-mounter:
-    image: rclone/rclone:latest
-    container_name: rclone-mounter
-    restart: unless-stopped
-    cap_add:
-      - SYS_ADMIN # Required for FUSE
-    devices:
-      - /dev/fuse # Expose FUSE device
-    security_opt:
-      - apparmor:unconfined # Unconfine AppArmor to allow FUSE mount
-    environment:
-      RCLONE_REMOTE: "${RCLONE_REMOTE}"   # e.g. "google_drive:"
-      RCLONE_TARGET: "${RCLONE_TARGET}"   # e.g. "/mnt-rclone/google_drive"
-    volumes:
-      # Config volume for rclone.conf
-      - type: bind
-        source: ./rclone/config
-        target: /config/rclone
-
-      # Config volume for entrypoint.sh
-      - type: bind
-        source: ./rclone/entrypoint.sh
-        target: /entrypoint.sh
-        read_only: true
-
-      # Optional: cache directory for VFS (improves stability/performance)
-      - type: bind
-        source: ./rclone/vfs-cache
-        target: /config/rclone/vfs-cache
-
-      # Mountpoint shared with host and other containers (Google Drive)
-      # Ensure the folder exists on the host machine before running
-      # e.g. sudo mkdir -p /mnt-rclone/google_drive
-      - type: bind
-        source: /mnt-rclone/google_drive
-        target: /mnt-rclone/google_drive
-        bind:
-          propagation: shared  # Allow mount propagation between containers
-    entrypoint: ["sh", "/entrypoint.sh"]
-    healthcheck:
-      test: ["CMD-SHELL", "grep -q ' /mnt-rclone/google_drive ' /proc/mounts"]
-      interval: 5s
-      timeout: 2s
-      retries: 5
-      start_period: 5s
-
   # Main Rust API service that checks mount status, manages backups, and sends emails
   backrest-reporter:
-    image: estessj/backrest-summary-reporter:latest
+    build:
+      context: .                        # Path to project root 
+      dockerfile: Dockerfile            # Dockerfile to build from
     container_name: backrest-reporter
     depends_on:
       backrest-reporter-db:
         condition: service_started      # Wait for database to be available
-      rclone-mounter:
-        condition: service_healthy      # Wait for rclone FUSE mounts to be available
     environment:
       DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-reporter-db/backrest-reporter-db
       TZ: ${TZ}                         # Set container timezone
@@ -83,13 +36,13 @@ services:
       EMAIL_FROM: ${EMAIL_FROM}
       EMAIL_TO: ${EMAIL_TO}
 
+      # Healthchecks ping url for API status
+      HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
+
       # Email scheduling and report configuration
       EMAIL_FREQUENCY: "${EMAIL_FREQUENCY}"
       STATS_INTERVAL: "${STATS_INTERVAL}"
       NUM_RETAINED_REPORTS: "${NUM_RETAINED_REPORTS}"
-
-      # Healthchecks ping url for API status
-      HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
 
       # Storage mount paths and nicknames (these paths must exist in the container)
       # Can supply as many as desired using the naming convention, starting at 1
@@ -117,17 +70,4 @@ services:
     volumes:
       # Store generated email reports
       - ./reports:/reports
-      # Host bind-mounts for local or remote mount points (read-only since we are only pulling stats)
-      - /opt:/mnt/opt:ro
-      - /mnt:/mnt/mnt:ro
-      # Google Drive mountpoint from rclone container
-      # Ensure the folder exists on the host machine before running
-      # e.g. sudo mkdir -p /mnt-rclone/google_drive
-      - type: bind
-        source: /mnt-rclone/google_drive
-        target: /mnt-rclone/google_drive
-        bind:
-          propagation: shared      # Required to see FUSE mounts
-    cap_add:
-      - SYS_ADMIN                  # For FUSE mounts
     restart: unless-stopped

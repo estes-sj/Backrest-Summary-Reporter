@@ -15,9 +15,7 @@ services:
 
   # Main Rust API service that checks mount status, manages backups, and sends emails
   backrest-reporter:
-    build:
-      context: .                        # Path to project root 
-      dockerfile: Dockerfile            # Dockerfile to build from
+    image: estessj/backrest-summary-reporter:latest
     container_name: backrest-reporter
     depends_on:
       backrest-reporter-db:
