@@ -17,6 +17,8 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
         .map_err(|_| "Failed to read HTML template")?;
     let success_tmpl = fs::read_to_string("html/success_snapshot.html")
         .map_err(|_| "Failed to read success snapshot template")?;
+    let warn_tmpl = fs::read_to_string("html/warn_snapshot.html")
+        .map_err(|_| "Failed to read warn snapshot template")?;
     let error_tmpl   = fs::read_to_string("html/error_snapshot.html")
         .map_err(|_| "Failed to read error snapshot template")?;
     let row_tmpl     = fs::read_to_string("html/snapshot_status_row.html")
@@ -31,6 +33,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     for summary in &report.snapshot_summaries {
         let tpl = match summary.event.as_str() {
             "snapshot success" => &success_tmpl,
+            "snapshot warning" => &warn_tmpl,
             "snapshot error"   => &error_tmpl,
             _                  => continue, // skip other events
         };
