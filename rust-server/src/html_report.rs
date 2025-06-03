@@ -41,7 +41,15 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
         // assume success_tmpl and error_tmpl have placeholders like {{ID}}, {{TIME}}, {{MESSAGE}}
         let mut entry = tpl.clone();
         entry = entry.replace("{{SNAPSHOT_PLAN}}", &summary.plan.to_string());
-        entry = entry.replace("{{SNAPSHOT_SUMMARY_ID}}", &summary.snapshot.to_string()[..10]);
+        
+        let replacement: &str = if summary.snapshot.is_empty() || summary.snapshot == "null" {
+            "N/A" // if it's empty or the literal "null"
+        } else {
+            // otherwise, take up to 10 characters
+            &summary.snapshot[..summary.snapshot.len().min(10)]
+        };
+        entry = entry.replace("{{SNAPSHOT_SUMMARY_ID}}", replacement);
+
         entry = entry.replace("{{SNAPSHOT_TIME}}", &format_local_datetime(summary.created_at));
         entry = entry.replace(
             "{{SNAPSHOT_NEW_FILES}}",
@@ -114,6 +122,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     let et = &report.event_totals.current;
     replacements.push(("{{TOTAL_EVENTS}}",           et.total_events.to_string()));
     replacements.push(("{{TOTAL_SNAPSHOT_SUCCESS}}", et.total_snapshot_success.to_string()));
+    replacements.push(("{{TOTAL_SNAPSHOT_WARNING}}", et.total_snapshot_warning.to_string()));
     replacements.push(("{{TOTAL_SNAPSHOT_ERROR}}",   et.total_snapshot_error.to_string()));
     replacements.push(("{{TOTAL_FORGET_SUCCESS}}",   et.total_forget_success.to_string()));
     replacements.push(("{{TOTAL_FORGET_ERROR}}",     et.total_forget_error.to_string()));

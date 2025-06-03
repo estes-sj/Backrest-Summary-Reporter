@@ -97,6 +97,7 @@ pub struct EventTotals {
 
     pub total_events:            i64,
     pub total_snapshot_success:  i64,
+    pub total_snapshot_warning:  i64,
     pub total_snapshot_error:    i64,
     pub total_forget_success:    i64,
     pub total_forget_error:      i64,

@@ -409,6 +409,7 @@ pub async fn fetch_event_totals(
 
           COALESCE(COUNT(*)                                                           , 0)::BIGINT AS total_events,
           COALESCE(SUM(CASE WHEN s.event ILIKE '%snapshot success%' THEN 1 ELSE 0 END), 0)::BIGINT AS total_snapshot_success,
+          COALESCE(SUM(CASE WHEN s.event ILIKE '%snapshot warning%' THEN 1 ELSE 0 END), 0)::BIGINT AS total_snapshot_warning,
           COALESCE(SUM(CASE WHEN s.event ILIKE '%snapshot error%'   THEN 1 ELSE 0 END), 0)::BIGINT AS total_snapshot_error,
           COALESCE(SUM(CASE WHEN s.event ILIKE '%forget success%'   THEN 1 ELSE 0 END), 0)::BIGINT AS total_forget_success,
           COALESCE(SUM(CASE WHEN s.event ILIKE '%forget error%'     THEN 1 ELSE 0 END), 0)::BIGINT AS total_forget_error,
