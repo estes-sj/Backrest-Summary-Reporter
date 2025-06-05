@@ -1,0 +1,187 @@
+services:
+  # PostgreSQL Database for storing backup metadata and statistics
+  backrest-reporter-db:
+    image: postgres:17
+    container_name: backrest-reporter-db
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}      # Username from .env
+      POSTGRES_PASSWORD: ${DB_PASSWORD}  # Password from .env
+      POSTGRES_DB: backrest-reporter-db  # Database name
+    volumes:
+      - ./db:/var/lib/postgresql/data   # Host ./db directory
+      - ./backups:/backups              # Mount host's ./backups dir
+    ports:
+      - "57432:5432" # Expose PostgreSQL for local development/debug
+    restart: unless-stopped
+
+  # Rclone container that handles mounting Google Drive via FUSE
+  rclone-mounter:
+    image: rclone/rclone:latest
+    container_name: rclone-mounter
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN # Required for FUSE
+    devices:
+      - /dev/fuse # Expose FUSE device
+    security_opt:
+      - apparmor:unconfined # Unconfine AppArmor to allow FUSE mount
+    environment:
+      RCLONE_REMOTE: "${RCLONE_REMOTE}"   # e.g. "google_drive:"
+      RCLONE_TARGET: "${RCLONE_TARGET}"   # e.g. "/mnt-rclone/google_drive"
+    volumes:
+      # Config volume for rclone.conf
+      - type: bind
+        source: ./rclone/config
+        target: /config/rclone
+
+      # Config volume for entrypoint.sh
+      - type: bind
+        source: ./rclone/entrypoint.sh
+        target: /entrypoint.sh
+        read_only: true
+
+      # Optional: cache directory for VFS (improves stability/performance)
+      - type: bind
+        source: ./rclone/vfs-cache
+        target: /config/rclone/vfs-cache
+
+      # Mountpoint shared with host and other containers (Google Drive)
+      # Ensure the folder exists on the host machine before running
+      # e.g. sudo mkdir -p /mnt-rclone/google_drive
+      - type: bind
+        source: /mnt-rclone/google_drive
+        target: /mnt-rclone/google_drive
+        bind:
+          propagation: shared  # Allow mount propagation between containers
+    entrypoint: ["sh", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q ' /mnt-rclone/google_drive ' /proc/mounts"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+
+  # Main Rust API service that checks mount status, manages backups, and sends emails
+  backrest-reporter:
+    image: estessj/backrest-summary-reporter:latest
+    container_name: backrest-reporter
+    depends_on:
+      backrest-reporter-db:
+        condition: service_started      # Wait for database to be available
+      rclone-mounter:
+        condition: service_healthy      # Wait for rclone FUSE mounts to be available
+    environment:
+      DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-reporter-db/backrest-reporter-db
+      TZ: ${TZ}                         # Set container timezone
+      AUTH_KEY: ${AUTH_KEY}             # API authentication key
+      RUST_LOG: info                    # Logging verbosity
+
+      # Email settings for report sending
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_TO: ${EMAIL_TO}
+
+      # Email scheduling and report configuration
+      EMAIL_FREQUENCY: "${EMAIL_FREQUENCY}"
+      STATS_INTERVAL: "${STATS_INTERVAL}"
+      NUM_RETAINED_REPORTS: "${NUM_RETAINED_REPORTS}"
+
+      # Healthchecks ping url for API status
+      HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
+
+      # Storage mount paths and nicknames (these paths must exist in the container)
+      # Can supply as many as desired using the naming convention, starting at 1
+      # Paths are the path inside the container, which is the right side of the :
+      # NICK refers to the optional nickname used in the email reports.
+      STORAGE_PATH_1: ${STORAGE_PATH_1}
+      STORAGE_NICK_1: ${STORAGE_NICK_1}
+      STORAGE_PATH_2: ${STORAGE_PATH_2}
+      STORAGE_NICK_2: ${STORAGE_NICK_2}
+      STORAGE_PATH_3: ${STORAGE_PATH_3}
+      STORAGE_NICK_3: ${STORAGE_NICK_3}
+      STORAGE_PATH_4: ${STORAGE_PATH_4}
+      STORAGE_NICK_4: ${STORAGE_NICK_4}
+      STORAGE_PATH_5: ${STORAGE_PATH_5}
+      STORAGE_NICK_5: ${STORAGE_NICK_5}
+      STORAGE_PATH_6: ${STORAGE_PATH_6}
+      STORAGE_NICK_6: ${STORAGE_NICK_6}
+
+      # Additional misc. settings used in the email reports
+      SERVER_NAME: ${SERVER_NAME}
+      BACKREST_URL: ${BACKREST_URL}
+      PGADMIN_URL: ${PGADMIN_URL}
+    ports:
+      - "2682:2682" # Expose API endpoint
+    volumes:
+      # Store generated email reports
+      - ./reports:/reports
+      # Host bind-mounts for local or remote mount points (read-only since we are only pulling stats)
+      - /opt:/mnt/opt:ro
+      - /mnt:/mnt/mnt:ro
+      # Google Drive mountpoint from rclone container
+      # Ensure the folder exists on the host machine before running
+      # e.g. sudo mkdir -p /mnt-rclone/google_drive
+      - type: bind
+        source: /mnt-rclone/google_drive
+        target: /mnt-rclone/google_drive
+        bind:
+          propagation: shared      # Required to see FUSE mounts
+    cap_add:
+      - SYS_ADMIN                  # For FUSE mounts
+    restart: unless-stopped
+
+  # Rsync cron scheduling
+  rsync-cron:
+    image: estessj/rsync-cron:latest
+    container_name: rsync-cron
+    env_file: .env
+    volumes:
+      # Map each host path into the container; add as many as configured
+      - "${STORAGE_FROM_1}:/mnt/from1:ro"
+      - "${STORAGE_TO_1}:/mnt/to1"
+      # Add more mounts as needed:
+      - "${STORAGE_FROM_2}:/mnt/from2:ro"
+      - "${STORAGE_TO_2}:/mnt/to2"
+    restart: unless-stopped
+
+  # Main Backrest container
+  backrest:
+    image: garethgeorge/backrest:latest
+    container_name: backrest
+    hostname: backrest
+    volumes:
+      - ./data:/data
+      - ./config:/config
+      - ./cache:/cache
+      - ./tmp:/tmp
+      - ./migration-playground:/userdata  # Mount local paths to backup
+      # Host bind-mounts for local or remote mount points (read-only since we are only pulling data)
+      - type: bind
+        source: /opt
+        target: /fedserver01/opt
+      - type: bind
+        source: /mnt
+        target: /fedserver01/mnt
+      - type: bind
+        source: /mnt-backup/backups
+        target: /fedserver01/mnt-backup/backups
+      - type: bind
+        source: /fedserver02/opt
+        target: /fedserver02/opt
+      - type: bind
+        source: /mnt-rclone/google_drive
+        target: /mnt-rclone/google_drive
+        bind:
+          propagation: shared  # Allow mount propagation between containers
+    environment:
+      - BACKREST_DATA=/data
+      - BACKREST_CONFIG=/config/config.json
+      - XDG_CACHE_HOME=/cache
+      - TMPDIR=/tmp
+      - TZ=America/New_York
+    ports:
+      - "9898:9898"
+    restart: unless-stopped

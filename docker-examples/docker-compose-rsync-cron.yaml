@@ -1,0 +1,78 @@
+services:
+  # Rsync cron scheduling
+  rsync-cron:
+    image: estessj/rsync-cron:latest
+    container_name: rsync-cron
+    env_file: .env
+    volumes:
+      # Map each host path into the container; add as many as configured
+      - "${STORAGE_FROM_1}:/mnt/from1:ro"
+      - "${STORAGE_TO_1}:/mnt/to1"
+      # Add more mounts as needed:
+      - "${STORAGE_FROM_2}:/mnt/from2:ro"
+      - "${STORAGE_TO_2}:/mnt/to2"
+    restart: unless-stopped
+
+  # PostgreSQL Database for storing backup metadata and statistics
+  backrest-reporter-db:
+    image: postgres:17
+    container_name: backrest-reporter-db
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}      # Username from .env
+      POSTGRES_PASSWORD: ${DB_PASSWORD}  # Password from .env
+      POSTGRES_DB: backrest-reporter-db  # Database name
+    volumes:
+      - ./db:/var/lib/postgresql/data   # Host ./db directory
+      - ./backups:/backups              # Mount host's ./backups dir
+    ports:
+      - "57432:5432" # Expose PostgreSQL for local development/debug
+    restart: unless-stopped
+
+  # Main Rust API service that checks mount status, manages backups, and sends emails
+  backrest-reporter:
+    image: estessj/backrest-summary-reporter:latest
+    container_name: backrest-reporter
+    depends_on:
+      backrest-reporter-db:
+        condition: service_started      # Wait for database to be available
+    environment:
+      DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@backrest-reporter-db/backrest-reporter-db
+      TZ: ${TZ}                         # Set container timezone
+      AUTH_KEY: ${AUTH_KEY}             # API authentication key
+      RUST_LOG: info                    # Logging verbosity
+
+      # Email settings for report sending
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_TO: ${EMAIL_TO}
+
+      # Healthchecks ping url for API status
+      HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
+
+      # Email scheduling and report configuration
+      EMAIL_FREQUENCY: "${EMAIL_FREQUENCY}"
+      STATS_INTERVAL: "${STATS_INTERVAL}"
+      NUM_RETAINED_REPORTS: "${NUM_RETAINED_REPORTS}"
+
+      # Storage mount paths and nicknames (these paths must exist in the container)
+      # Can supply as many as desired using the naming convention, starting at 1
+      # Paths are the path inside the container, which is the right side of the :
+      # NICK refers to the optional nickname used in the email reports.
+      STORAGE_PATH_1: ${STORAGE_PATH_1}
+      STORAGE_NICK_1: ${STORAGE_NICK_1}
+      STORAGE_PATH_2: ${STORAGE_PATH_2}
+      STORAGE_NICK_2: ${STORAGE_NICK_2}
+
+      # Additional misc. settings used in the email reports
+      SERVER_NAME: ${SERVER_NAME}
+      BACKREST_URL: ${BACKREST_URL}
+      PGADMIN_URL: ${PGADMIN_URL}
+    ports:
+      - "2682:2682" # Expose API endpoint
+    volumes:
+      # Store generated email reports
+      - ./reports:/reports
+    restart: unless-stopped
