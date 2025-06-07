@@ -48,7 +48,8 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       EMAIL_FROM: ${EMAIL_FROM}
       EMAIL_TO: ${EMAIL_TO}
-
+      SEND_STARTUP_EMAIL: "${SEND_STARTUP_EMAIL}"
+      
       # Healthchecks ping url for API status
       HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
 
