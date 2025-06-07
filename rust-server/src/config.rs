@@ -23,6 +23,7 @@ pub struct Config {
     pub smtp_password: Option<String>,
     pub email_from: Option<String>,
     pub email_to: Option<String>,
+    pub send_startup_email: bool,
 
     // --- Healthcheck settings (optional) ---
     pub healthcheck_url: Option<String>,
@@ -81,6 +82,18 @@ impl Config {
         let email_from    = env::var("EMAIL_FROM").ok();
         let email_to      = env::var("EMAIL_TO").ok();
 
+        // Optional startup email
+        // Map the String to bool by lowercasing and comparing
+        // Set to false as default
+        let send_startup_email = env::var("SEND_STARTUP_EMAIL")
+            .map(|s| {
+                let val = s.to_lowercase();
+                // treat "true" or "1" as true (everything else = false)
+                val == "true" || val == "1"
+            })
+            // If the var wasn't set, default to false
+            .unwrap_or(false);
+
         // Optional storage mounts
         let mut storage_mounts = Vec::new();
         for idx in 1.. {
@@ -133,6 +146,7 @@ impl Config {
             smtp_password,
             email_from,
             email_to,
+            send_startup_email,
             healthcheck_url,
             storage_mounts,
             server_name,
