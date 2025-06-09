@@ -127,6 +127,7 @@ At this point, you can [test additional endpoints](#endpoints) and setting up th
 | **SMTP\_PASSWORD**         | SMTP password or app-specific password (never use your main email password)                                | Required                                            |
 | **EMAIL\_FROM**            | Email address and display name emails will be sent from (e.g. `Your App Name <you@example.com>`)           | Required                                            |
 | **EMAIL\_TO**              | Comma-separated list of recipient email addresses                                                          | Required                                            |
+| **SEND\_STARTUP\_EMAIL**   | Flag for sending email when system is first online. Set to `TRUE` or `1` to enable.                        | Optional • Default: None (`False`)                                           |
 | **EMAIL\_FREQUENCY**       | Cron schedule in UTC (e.g., `0 0 0 * * *` runs daily at midnight UTC)                                      | Optional • Default: `0 0 0 * * *`                   |
 | **STATS\_INTERVAL**        | Interval (in hours) of backup data to include in the email (e.g., `24` = last 24 hours)                    | Optional • Default: `24`                            |
 | **NUM\_RETAINED\_REPORTS** | Number of retained reports stored; oldest are deleted first when exceeding this number                     | Optional • Default: `10`                            |
@@ -234,6 +235,8 @@ curl -X POST https://your-backrest-reporter-instance/send-test-email \
 ```
 
 Check your Gmail inbox (or Spam folder) to verify the report is being sent.
+
+You can also enable `SEND_STARTUP_EMAIL` in your `.env` by setting it to `TRUE` or `1`. Doing so enables a startup email when the container is brought online. It contains the container ID and next report generation time. This can be useful for detecting automated updates to the container or unexpected outages.
 
 ### Tips
 

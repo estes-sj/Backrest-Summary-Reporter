@@ -1,4 +1,5 @@
 use axum::http::StatusCode;
+use std::fs;
 
 /// Log a failure, ping healthcheck(fail) with a combined message of
 /// **static** + **formatted** details, but return only the static part
@@ -98,4 +99,12 @@ macro_rules! start {
             Some(&combined),
         );
     }};
+}
+
+/// Try to read the container ID from /etc/hostname,
+/// or return `"Unknown"` if that fails.
+pub fn container_id_from_hostname() -> String {
+    fs::read_to_string("/etc/hostname")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| "Unknown".into())
 }
