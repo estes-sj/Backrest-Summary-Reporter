@@ -212,31 +212,21 @@
         <tr>
           <td class="card-cell">
             <div class="card info">
-              <h2 class="summary-headers">Date Range: {{START_DATE}} – {{END_DATE}} {{DATE_RANGE_TIMEZONE}}</h2>
-              <h3 class="summary-header">📊 Events & Snapshots</h2>
-              <ul class="small">
-                <li>Total Events: {{TOTAL_EVENTS}}</li>
-                <li>Total Snapshots: {{TOTAL_SNAPSHOT_SUCCESS}}</li>
-                <li>Snapshot Warnings: {{TOTAL_SNAPSHOT_WARNING}}</li>
-                <li>Snapshot Failures: {{TOTAL_SNAPSHOT_ERROR}}</li>
-                <li>Forget Operations: {{TOTAL_FORGET_SUCCESS}}</li>
-                <li>Forget Failures: {{TOTAL_FORGET_ERROR}}</li>
-                </ul>
-
+              <h1>{{START_DATE}} – {{END_DATE}} {{DATE_RANGE_TIMEZONE}}</h2>
                 <table class="status-table" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                   <tr>
                     <td class="card-cell">
                       <div class="section">
-                        <h2 class="summary-headers">💾 Data Processed</h2>
+                        <h2 class="summary-headers">📊 Events & Snapshots</h2>
                         <table class="summary-table">
                           <thead>
-                            <tr><th>Scope</th><th>Amount</th><th>Comparison</th></tr>
+                            <tr><th>Event Type</th><th>Success</th><th>Warnings</th><th>Errors</th></tr>
                           </thead>
                           <tbody>
-                            <tr><td>Total</td><td>{{TOTAL_DATA_PROCESSED}}</td><td>–</td></tr>
-                            <tr><td>Day</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td></tr>
-                            <tr><td>Week</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td></tr>
-                            <tr><td>Month</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td><span style="float: left;">📸</span> Snapshots</td><td>{{TOTAL_SNAPSHOT_SUCCESS}}</td><td>{{TOTAL_SNAPSHOT_WARNING}}</td><td>{{TOTAL_SNAPSHOT_ERROR}}</td></tr>
+                            <tr><td><span style="float: left;">🧹</span> Forgets</td><td>{{TOTAL_FORGET_SUCCESS}}</td><td>{{TOTAL_FORGET_WARNING}}</td><td>{{TOTAL_FORGET_ERROR}}</td></tr>
+                            <tr><td><span style="float: left;">✂️</span> Prunes</td><td>{{TOTAL_PRUNE_SUCCESS}}</td><td>{{TOTAL_PRUNE_WARNING}}</td><td>{{TOTAL_PRUNE_ERROR}}</td></tr>
+                            <tr><td><span style="float: left;">🔎</span> Checks</td><td>{{TOTAL_CHECK_SUCCESS}}</td><td>{{TOTAL_CHECK_WARNING}}</td><td>{{TOTAL_CHECK_ERROR}}</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -261,7 +251,41 @@
                   <tr>
                     <td class="card-cell">
                       <div class="section">
-                        <h2 class="summary-headers">📁 Files Overview</h2>
+                        <h2 class="summary-headers">📥 Data Added</h2>
+                        <table class="summary-table">
+                          <thead>
+                            <tr><th>Scope</th><th>Amount</th><th>Comparison</th></tr>
+                          </thead>
+                          <tbody>
+                            <tr><td>Total</td><td>{{TOTAL_DATA_ADDED}}</td><td>–</td></tr>
+                            <tr><td>Day</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_DAY}}</td></tr>
+                            <tr><td>Week</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_WEEK}}</td></tr>
+                            <tr><td>Month</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_MONTH}}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                    <td class="card-cell">
+                      <div class="section">
+                        <h2 class="summary-headers">💾 Data Processed</h2>
+                        <table class="summary-table">
+                          <thead>
+                            <tr><th>Scope</th><th>Amount</th><th>Comparison</th></tr>
+                          </thead>
+                          <tbody>
+                            <tr><td>Total</td><td>{{TOTAL_DATA_PROCESSED}}</td><td>–</td></tr>
+                            <tr><td>Day</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td></tr>
+                            <tr><td>Week</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td></tr>
+                            <tr><td>Month</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="card-cell">
+                      <div class="section">
+                        <h2 class="summary-headers">📄 Files Overview</h2>
                         <table class="summary-table">
                           <thead>
                             <tr>
