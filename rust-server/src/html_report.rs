@@ -120,27 +120,56 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
 
     // Event totals (current)
     let et = &report.event_totals.current;
-    replacements.push(("{{TOTAL_EVENTS}}",           et.total_events.to_string()));
-    replacements.push(("{{TOTAL_SNAPSHOT_SUCCESS}}", et.total_snapshot_success.to_string()));
-    replacements.push(("{{TOTAL_SNAPSHOT_WARNING}}", et.total_snapshot_warning.to_string()));
-    replacements.push(("{{TOTAL_SNAPSHOT_ERROR}}",   et.total_snapshot_error.to_string()));
-    replacements.push(("{{TOTAL_FORGET_SUCCESS}}",   et.total_forget_success.to_string()));
-    replacements.push(("{{TOTAL_FORGET_ERROR}}",     et.total_forget_error.to_string()));
+    // Plain dash when zero
+    let dash = "–";
+
+    // Success cells
+    replacements.push(("{{TOTAL_SNAPSHOT_SUCCESS}}", fmt_event_cell(et.total_snapshot_success,   dash, "✅")));
+    replacements.push(("{{TOTAL_FORGET_SUCCESS}}",   fmt_event_cell(et.total_forget_success,     dash, "✅")));
+    replacements.push(("{{TOTAL_PRUNE_SUCCESS}}",    fmt_event_cell(et.total_prune_success,      dash, "✅")));
+    replacements.push(("{{TOTAL_CHECK_SUCCESS}}",    fmt_event_cell(et.total_check_success,      dash, "✅")));
+
+    // Warning cells
+    replacements.push(("{{TOTAL_SNAPSHOT_WARNING}}", fmt_event_cell(et.total_snapshot_warning,   dash, "⚠️")));
+    replacements.push(("{{TOTAL_FORGET_WARNING}}",   fmt_event_cell(et.total_forget_warning,     dash, "⚠️")));
+    replacements.push(("{{TOTAL_PRUNE_WARNING}}",    fmt_event_cell(et.total_prune_warning,      dash, "⚠️")));
+    replacements.push(("{{TOTAL_CHECK_WARNING}}",    fmt_event_cell(et.total_check_warning,      dash, "⚠️")));
+
+    // Error cells
+    replacements.push(("{{TOTAL_SNAPSHOT_ERROR}}",   fmt_event_cell(et.total_snapshot_error,     dash, "❌")));
+    replacements.push(("{{TOTAL_FORGET_ERROR}}",     fmt_event_cell(et.total_forget_error,       dash, "❌")));
+    replacements.push(("{{TOTAL_PRUNE_ERROR}}",      fmt_event_cell(et.total_prune_error,        dash, "❌")));
+    replacements.push(("{{TOTAL_CHECK_ERROR}}",      fmt_event_cell(et.total_check_error,        dash, "❌")));
+
+    // Data added
+    let cur_bytes_added = et.total_data_added as u64;
+    let prev_day_bytes_added  = report.event_totals.previous_day.as_ref().map(|e| e.total_data_added as u64);
+    let prev_week_bytes_added = report.event_totals.previous_week.as_ref().map(|e| e.total_data_added as u64);
+    let prev_month_bytes_added= report.event_totals.previous_month.as_ref().map(|e| e.total_data_added as u64);
+
+    replacements.push(("{{TOTAL_DATA_ADDED}}", format_bytes(cur_bytes_added)));
+    replacements.push(("{{TOTAL_DATA_ADDED_PREVIOUS_DAY}}",  prev_day_bytes_added.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
+    replacements.push(("{{TOTAL_DATA_ADDED_PREVIOUS_WEEK}}", prev_week_bytes_added.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
+    replacements.push(("{{TOTAL_DATA_ADDED_PREVIOUS_MONTH}}", prev_month_bytes_added.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
+
+    replacements.push(("{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_DAY}}",  fmt_bytes_change_pct(cur_bytes_added, prev_day_bytes_added)));
+    replacements.push(("{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_WEEK}}", fmt_bytes_change_pct(cur_bytes_added, prev_week_bytes_added)));
+    replacements.push(("{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_MONTH}}", fmt_bytes_change_pct(cur_bytes_added, prev_month_bytes_added)));
 
     // Data processed
-    let cur_bytes = et.total_bytes_processed as u64;
-    let prev_day_bytes  = report.event_totals.previous_day.as_ref().map(|e| e.total_bytes_processed as u64);
-    let prev_week_bytes = report.event_totals.previous_week.as_ref().map(|e| e.total_bytes_processed as u64);
-    let prev_month_bytes= report.event_totals.previous_month.as_ref().map(|e| e.total_bytes_processed as u64);
+    let cur_bytes_processed = et.total_bytes_processed as u64;
+    let prev_day_bytes_processed  = report.event_totals.previous_day.as_ref().map(|e| e.total_bytes_processed as u64);
+    let prev_week_bytes_processed = report.event_totals.previous_week.as_ref().map(|e| e.total_bytes_processed as u64);
+    let prev_month_bytes_processed= report.event_totals.previous_month.as_ref().map(|e| e.total_bytes_processed as u64);
 
-    replacements.push(("{{TOTAL_DATA_PROCESSED}}", format_bytes(cur_bytes)));
-    replacements.push(("{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}",  prev_day_bytes.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
-    replacements.push(("{{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}", prev_week_bytes.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
-    replacements.push(("{{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}", prev_month_bytes.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
+    replacements.push(("{{TOTAL_DATA_PROCESSED}}", format_bytes(cur_bytes_processed)));
+    replacements.push(("{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}",  prev_day_bytes_processed.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
+    replacements.push(("{{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}", prev_week_bytes_processed.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
+    replacements.push(("{{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}", prev_month_bytes_processed.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
 
-    replacements.push(("{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}",  fmt_bytes_change_pct(cur_bytes, prev_day_bytes)));
-    replacements.push(("{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}", fmt_bytes_change_pct(cur_bytes, prev_week_bytes)));
-    replacements.push(("{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}", fmt_bytes_change_pct(cur_bytes, prev_month_bytes)));
+    replacements.push(("{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}",  fmt_bytes_change_pct(cur_bytes_processed, prev_day_bytes_processed)));
+    replacements.push(("{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}", fmt_bytes_change_pct(cur_bytes_processed, prev_week_bytes_processed)));
+    replacements.push(("{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}", fmt_bytes_change_pct(cur_bytes_processed, prev_month_bytes_processed)));
 
     // Duration
     let cur_dur = et.total_duration;
@@ -307,6 +336,35 @@ pub fn prune_old_reports(dir_path: &str, max_files: usize) -> std::io::Result<()
 ///
 /// HELPER AND FORMATTING METHODS
 /// 
+
+/// Formats a table cell value, replacing zero with a custom representation,
+/// and non-zero values with a floated emoji and the numeric count.
+/// 
+/// # Arguments
+/// 
+/// * `n` – The numeric value to format.
+/// * `zero_repr` – The string to use when `n` is zero (e.g. `"-"`).
+/// * `emoji` – The emoji to prepend for non-zero values (e.g. `"✅"`, `"⚠️"`, `"❌"`).
+/// 
+/// # Returns
+/// 
+/// A `String` containing either:
+/// - `zero_repr` if `n == 0`, or
+/// - `"<span style=\"float: left;\">{emoji}</span> {n}"` if `n != 0`.
+/// 
+/// # Examples
+/// 
+/// ```rust
+/// assert_eq!(fmt_event_cell(0, "-", "✅"), "-");
+/// assert_eq!(fmt_event_cell(6, "-", "✅"), "<span style=\"float: left;\">✅</span> 6");
+/// ```
+fn fmt_event_cell(n: i64, zero_repr: &str, emoji: &str) -> String {
+    if n == 0 {
+        zero_repr.to_string()
+    } else {
+        format!("<span style=\"float: left;\">{}</span> {}", emoji, n)
+    }
+}
 
 /// Returns a HEX color based on the used‐percentage thresholds:
 /// - 90–100 → greenish  (`#b02020`)
@@ -477,7 +535,7 @@ impl AsEventOpt for EventTotals {
 
 /// Formats a total count value extracted from EventTotals (or an Option).
 /// Returns the value as a string, or "–" if not available.
-/// Uses scientific notation if the number exceeds 99,999.
+/// Uses scientific notation if the number exceeds 9,999.
 fn get_formatted_total<T, F>(opt: &T, extractor: F) -> String
 where
     T: AsEventOpt,
@@ -486,8 +544,8 @@ where
     opt.as_event_opt()
         .map(|e| {
             let val = extractor(e);
-            if val.abs() > 99_999 {
-                format!("{:.2e}", val as f64)
+            if val.abs() > 9999 {
+                format!("{:.1e}", val as f64)
             } else {
                 val.to_string()
             }

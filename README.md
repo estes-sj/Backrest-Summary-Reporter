@@ -3,7 +3,8 @@
 A companion service for Backrest Restic that tracks snapshot activity and storage usage. It aggregates backup metadata into a database and sends scheduled email reports summarizing snapshot events and storage statistics.
 
 <p align="center">
-    <img src="docs/img/example_report.png" alt="Example Report" width="60%"/>
+    <img src="docs/img/example_report_p1.png" alt="Example Report Top Half" width="49%"/>
+    <img src="docs/img/example_report_p2.png" alt="Example Report Bottom Half" width="49%"/>
 </p>
 
 ## Features
@@ -823,9 +824,8 @@ ls: cannot access '/mnt-rclone/google_drive/': Transport endpoint is not connect
 	docker compose up -d --build
 	```
 
-## Future Work
-
-- Add `Prune` events
+## Related Projects
+- [Docker Rsync Cron](https://github.com/estes-sj/rsync-cron-docker) - A Dockerized solution for managing scheduled `rsync` jobs with `cron`. Useful for creating scheduled clones rather than restic backups. Creates snapshot information compatible with the Backrest Summary Reporter.
 
 ## License
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
