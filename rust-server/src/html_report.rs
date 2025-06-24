@@ -123,6 +123,79 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     // Plain dash when zero
     let dash = "–";
 
+    // Cell background colors
+    // Calculate current-day status color
+    let current_day_status_color = status_color(
+        (et.total_snapshot_error
+            + et.total_forget_error
+            + et.total_prune_error
+            + et.total_check_error) as u64,
+        (et.total_snapshot_warning
+            + et.total_forget_warning
+            + et.total_prune_warning
+            + et.total_check_warning) as u64,
+    );
+    // Calculate previous-day status color
+    let previous_day_status_color = report
+        .event_totals
+        .previous_day
+        .as_ref()
+        .map(|pd| {
+            status_color(
+                (pd.total_snapshot_error
+                    + pd.total_forget_error
+                    + pd.total_prune_error
+                    + pd.total_check_error) as u64,
+                (pd.total_snapshot_warning
+                    + pd.total_forget_warning
+                    + pd.total_prune_warning
+                    + pd.total_check_warning) as u64,
+            )
+        })
+        .unwrap_or("#d1ecf100");
+    // Calculate previous-week status color
+    let previous_week_status_color = report
+        .event_totals
+        .previous_week
+        .as_ref()
+        .map(|pw| {
+            status_color(
+                (pw.total_snapshot_error
+                    + pw.total_forget_error
+                    + pw.total_prune_error
+                    + pw.total_check_error) as u64,
+                (pw.total_snapshot_warning
+                    + pw.total_forget_warning
+                    + pw.total_prune_warning
+                    + pw.total_check_warning) as u64,
+            )
+        })
+        .unwrap_or("#d1ecf100");
+    // Calculate previous-month status color
+    let previous_month_status_color = report
+        .event_totals
+        .previous_month
+        .as_ref()
+        .map(|pm| {
+            status_color(
+                (pm.total_snapshot_error
+                    + pm.total_forget_error
+                    + pm.total_prune_error
+                    + pm.total_check_error) as u64,
+                (pm.total_snapshot_warning
+                    + pm.total_forget_warning
+                    + pm.total_prune_warning
+                    + pm.total_check_warning) as u64,
+            )
+        })
+        .unwrap_or("#d1ecf100");
+
+    // Inject the four color replacements for table cells
+    replacements.push(("{{CURRENT_DAY_STATUS_COLOR}}",    current_day_status_color.to_string()));
+    replacements.push(("{{PREVIOUS_DAY_STATUS_COLOR}}",   previous_day_status_color.to_string()));
+    replacements.push(("{{PREVIOUS_WEEK_STATUS_COLOR}}",  previous_week_status_color.to_string()));
+    replacements.push(("{{PREVIOUS_MONTH_STATUS_COLOR}}", previous_month_status_color.to_string()));
+
     // Success cells
     replacements.push(("{{TOTAL_SNAPSHOT_SUCCESS}}", fmt_event_cell(et.total_snapshot_success,   dash, "✅")));
     replacements.push(("{{TOTAL_FORGET_SUCCESS}}",   fmt_event_cell(et.total_forget_success,     dash, "✅")));
@@ -637,4 +710,15 @@ fn get_formatted_dirs_unmodified<T: AsEventOpt>(opt: &T) -> String {
 /// Returns the % change in unmodified dirs compared to previous, or "–" if not available.
 fn get_dirs_unmodified_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
     get_change_pct(cur, opt, |e| e.total_dirs_unmodified)
+}
+
+/// Decide a background color for the table cells based on whether there were errors, warnings, or neither
+fn status_color(errors: u64, warnings: u64) -> &'static str {
+    if errors > 0 {
+        "#f8d7da"   // error red
+    } else if warnings > 0 {
+        "#fff3cd"   // warning yellow
+    } else {
+        "#d1ecf100" // transparent blue (info)
+    }
 }
