@@ -239,10 +239,10 @@
                             <tr><th>Scope</th><th>Time</th><th>Comparison</th></tr>
                           </thead>
                           <tbody>
-                            <tr><td>Total</td><td>{{TOTAL_DURATION}}</td><td>–</td></tr>
-                            <tr><td>Day</td><td>{{TOTAL_DURATION_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_DAY}}</td></tr>
-                            <tr><td>Week</td><td>{{TOTAL_DURATION_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_WEEK}}</td></tr>
-                            <tr><td>Month</td><td>{{TOTAL_DURATION_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_MONTH}}</td></tr>
+                            <tr style="background-color: {{CURRENT_DAY_STATUS_COLOR}};"><td>Total</td><td>{{TOTAL_DURATION}}</td><td>–</td></tr>
+                            <tr style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};"><td>Day</td><td>{{TOTAL_DURATION_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_DAY}}</td></tr>
+                            <tr style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};"><td>Week</td><td>{{TOTAL_DURATION_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_WEEK}}</td></tr>
+                            <tr style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};"><td>Month</td><td>{{TOTAL_DURATION_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DURATION_PREVIOUS_MONTH}}</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -257,10 +257,10 @@
                             <tr><th>Scope</th><th>Amount</th><th>Comparison</th></tr>
                           </thead>
                           <tbody>
-                            <tr><td>Total</td><td>{{TOTAL_DATA_ADDED}}</td><td>–</td></tr>
-                            <tr><td>Day</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_DAY}}</td></tr>
-                            <tr><td>Week</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_WEEK}}</td></tr>
-                            <tr><td>Month</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_MONTH}}</td></tr>
+                            <tr style="background-color: {{CURRENT_DAY_STATUS_COLOR}};"><td>Total</td><td>{{TOTAL_DATA_ADDED}}</td><td>–</td></tr>
+                            <tr style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};"><td>Day</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_DAY}}</td></tr>
+                            <tr style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};"><td>Week</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_WEEK}}</td></tr>
+                            <tr style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};"><td>Month</td><td>{{TOTAL_DATA_ADDED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_MONTH}}</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -273,10 +273,10 @@
                             <tr><th>Scope</th><th>Amount</th><th>Comparison</th></tr>
                           </thead>
                           <tbody>
-                            <tr><td>Total</td><td>{{TOTAL_DATA_PROCESSED}}</td><td>–</td></tr>
-                            <tr><td>Day</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td></tr>
-                            <tr><td>Week</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td></tr>
-                            <tr><td>Month</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td></tr>
+                            <tr style="background-color: {{CURRENT_DAY_STATUS_COLOR}};"><td>Total</td><td>{{TOTAL_DATA_PROCESSED}}</td><td>–</td></tr>
+                            <tr style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};"><td>Day</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}</td></tr>
+                            <tr style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};"><td>Week</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_WEEK}}</td></tr>
+                            <tr style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};"><td>Month</td><td>{{TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td><td>{{PERCENT_TOTAL_DATA_PROCESSED_PREVIOUS_MONTH}}</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -297,9 +297,9 @@
                             </tr>
                           </thead>
                           <tbody>
-                            <tr><td>New Files</td><td>{{TOTAL_FILES_NEW}}</td><td>{{TOTAL_FILES_NEW_PREVIOUS_DAY}}</td><td>{{TOTAL_FILES_NEW_PREVIOUS_WEEK}}</td><td>{{TOTAL_FILES_NEW_PREVIOUS_MONTH}}</td></tr>
-                            <tr><td>Changed Files</td><td>{{TOTAL_FILES_CHANGED}}</td><td>{{TOTAL_FILES_CHANGED_PREVIOUS_DAY}}</td><td>{{TOTAL_FILES_CHANGED_PREVIOUS_WEEK}}</td><td>{{TOTAL_FILES_CHANGED_PREVIOUS_MONTH}}</td></tr>
-                            <tr><td>Unmodified Files</td><td>{{TOTAL_FILES_UNMODIFIED}}</td><td>{{TOTAL_FILES_UNMODIFIED_PREVIOUS_DAY}}</td><td>{{TOTAL_FILES_UNMODIFIED_PREVIOUS_WEEK}}</td><td>{{TOTAL_FILES_UNMODIFIED_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>New Files</td><td style="background-color: {{CURRENT_DAY_STATUS_COLOR}};">{{TOTAL_FILES_NEW}}</td><td style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};">{{TOTAL_FILES_NEW_PREVIOUS_DAY}}</td><td style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};">{{TOTAL_FILES_NEW_PREVIOUS_WEEK}}</td><td style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};">{{TOTAL_FILES_NEW_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Changed Files</td><td style="background-color: {{CURRENT_DAY_STATUS_COLOR}};">{{TOTAL_FILES_CHANGED}}</td><td style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};">{{TOTAL_FILES_CHANGED_PREVIOUS_DAY}}</td><td style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};">{{TOTAL_FILES_CHANGED_PREVIOUS_WEEK}}</td><td style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};">{{TOTAL_FILES_CHANGED_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Unmodified Files</td><td style="background-color: {{CURRENT_DAY_STATUS_COLOR}};">{{TOTAL_FILES_UNMODIFIED}}</td><td style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};">{{TOTAL_FILES_UNMODIFIED_PREVIOUS_DAY}}</td><td style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};">{{TOTAL_FILES_UNMODIFIED_PREVIOUS_WEEK}}</td><td style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};">{{TOTAL_FILES_UNMODIFIED_PREVIOUS_MONTH}}</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -318,9 +318,9 @@
                             </tr>
                           </thead>
                           <tbody>
-                            <tr><td>New Dirs</td><td>{{TOTAL_DIRS_NEW}}</td><td>{{TOTAL_DIRS_NEW_PREVIOUS_DAY}}</td><td>{{TOTAL_DIRS_NEW_PREVIOUS_WEEK}}</td><td>{{TOTAL_DIRS_NEW_PREVIOUS_MONTH}}</td></tr>
-                            <tr><td>Changed Dirs</td><td>{{TOTAL_DIRS_CHANGED}}</td><td>{{TOTAL_DIRS_CHANGED_PREVIOUS_DAY}}</td><td>{{TOTAL_DIRS_CHANGED_PREVIOUS_WEEK}}</td><td>{{TOTAL_DIRS_CHANGED_PREVIOUS_MONTH}}</td></tr>
-                            <tr><td>Unmodified Dirs</td><td>{{TOTAL_DIRS_UNMODIFIED}}</td><td>{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_DAY}}</td><td>{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_WEEK}}</td><td>{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>New Dirs</td><td style="background-color: {{CURRENT_DAY_STATUS_COLOR}};">{{TOTAL_DIRS_NEW}}</td><td style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};">{{TOTAL_DIRS_NEW_PREVIOUS_DAY}}</td><td style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};">{{TOTAL_DIRS_NEW_PREVIOUS_WEEK}}</td><td style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};">{{TOTAL_DIRS_NEW_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Changed Dirs</td><td style="background-color: {{CURRENT_DAY_STATUS_COLOR}};">{{TOTAL_DIRS_CHANGED}}</td><td style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};">{{TOTAL_DIRS_CHANGED_PREVIOUS_DAY}}</td><td style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};">{{TOTAL_DIRS_CHANGED_PREVIOUS_WEEK}}</td><td style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};">{{TOTAL_DIRS_CHANGED_PREVIOUS_MONTH}}</td></tr>
+                            <tr><td>Unmodified Dirs</td><td style="background-color: {{CURRENT_DAY_STATUS_COLOR}};">{{TOTAL_DIRS_UNMODIFIED}}</td><td style="background-color: {{PREVIOUS_DAY_STATUS_COLOR}};">{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_DAY}}</td><td style="background-color: {{PREVIOUS_WEEK_STATUS_COLOR}};">{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_WEEK}}</td><td style="background-color: {{PREVIOUS_MONTH_STATUS_COLOR}};">{{TOTAL_DIRS_UNMODIFIED_PREVIOUS_MONTH}}</td></tr>
                           </tbody>
                         </table>
                       </div>
