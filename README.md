@@ -20,13 +20,35 @@ Below are the main events that regularly occur during this process.
 
 ### Backup Initiated by Backrest
 
-When Backrest starts a snapshot, it calls the [`/add-event` endpoint](#add-snapshot-event). All the available data provided during the Backrest hook is sent and stored in the API.
+When Backrest starts or completes a snapshot, forget, check, or prune, it calls the [`/add-event` endpoint](#add-snapshot-event). All the available data provided during the Backrest hook is sent and stored in the API's database.
 
 ```mermaid
 flowchart TD
-    A["Backrest Snapshot Start"]
-    A -->|"/add-event Endpoint"| B["Send Available Data"]
-    B --> C["Store Data in API"]
+    subgraph Backrest
+        subgraph Backrest Events
+            A1["Snapshot"]
+            A2["Forget"]
+            A3["Check"]
+            A4["Prune"]
+        end
+
+        B["Backrest Hook Triggered"]
+        C["Call /add-event Endpoint Containing Event Metadata"]
+    end
+
+    subgraph Backrest Summary Reporter
+        D["Received Event Metadata"]
+        E["Store Data in Database"]
+    end
+
+    A1 --> B
+    A2 --> B
+    A3 --> B
+    A4 --> B
+
+    B --> C
+    C --> D
+    D --> E
 ```
 
 ### Automatic Storage Statistics
@@ -63,30 +85,41 @@ Email reports can also be manually called via the [`/generate-and-send-email-rep
 
 ```mermaid
 flowchart TD
-    subgraph Email_Reports
-        A["Email Frequency (.env)"]
-        A --> B["Use /generate-and-send-email-report"]
-        B --> C["SMTP Settings"]
-        B --> D["Current Database"]
-        C --> E["Send Formatted Restic Event Report"]
-        D --> E
-        A -->|Default every 24 hrs| F["Check STATS_INTERVAL"]
+    subgraph Backrest Summary Reporter
 
-        F["Stats Interval (.env) (Default: 24)"]
-        F --> G["Data from Last 24 Hours"]
+        subgraph Email Reporting Logic
+            E1["Scheduled Email Report Trigger"]
+            E2["EMAIL_FREQUENCY (.env)"]
+            E3["STATS_INTERVAL (.env, default 24h)"]
+            E4["Call /generate-and-send-email-report"]
+            E5["Use SMTP Settings"]
+            E6["Query Events from Last STATS_INTERVAL"]
+            E7["Format and Send Report via Email"]
+        end
+
+        subgraph Manual Trigger
+            M1["Manual API Call"]
+            M1 --> E4
+        end
+
+        subgraph Storage Statistics
+            S1["Refresh Latest Storage Stats"]
+            S2["Query Current, Previous Day, Previous Week, and Previous Month"]
+        end
+
     end
 
-    H["Manual Email Trigger"]
-    H -->|Use /generate-and-send-email-report| B
-
-    subgraph Storage_Statistics
-        I["Refresh Storage Statistics"]
-        I --> J["Query Statistics"]
-        J --> K["Latest"]
-        J --> L["Previous Day"]
-        J --> M["Previous Week"]
-        J --> N["Previous Month"]
-    end
+    E1 --> E2
+    E1 --> E3
+    E2 --> E4
+    E3 --> E6
+    E4 --> S1
+    E4 --> E5
+    E4 --> E6
+    E6 --> E7
+    E5 --> E7
+    S1 --> S2
+    S2 --> E7
 ```
 
 ## Main Setup
@@ -389,6 +422,9 @@ To create an rclone config, see the [official rclone docs](https://rclone.org/co
       retries: 5
       start_period: 5s
 ```
+
+> [!IMPORTANT]
+> If the main Backrest container will be accessing this mount, it may be best to ensure it is included in the compose file. This ensures that restarts to the rclone container do not break accessibility within the Backrest service. An example docker compose with Backrest included can be found [here](docker-examples/docker-compose-backrest.yaml).
 
 ## Healthchecks
 
