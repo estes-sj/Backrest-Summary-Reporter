@@ -65,6 +65,7 @@ pub async fn spawn_email_report_cron(cfg: Config) {
                         "{{PGADMIN_URL}}",
                         &cfg.pgadmin_url.clone().unwrap_or_default(),
                     );
+                    html = html.replace("{{VERSION}}", &cfg.version.to_string());
 
                     // Build and send the email
                     if let Err(err) = client.send_html("🎉 Server Startup", html, &cfg).await {
