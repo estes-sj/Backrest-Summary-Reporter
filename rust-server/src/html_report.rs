@@ -7,6 +7,7 @@ use std::{fs, path::Path};
 use crate::{
     config::Config,
     models::{CurrentStorageStats, EventTotals, GenerateReport},
+    utils::{format_local_datetime},
 };
 
 /// Renders the full report email, replacing placeholders in the template.
@@ -480,14 +481,6 @@ fn format_bytes(bytes: u64) -> String {
     } else {
         format!("{} B", bytes)
     }
-}
-
-/// Formats any DateTime into a local time string as:
-/// "MM/DD/YYYY at hh:mm:ss AM/PM ZZZ"
-fn format_local_datetime<Tz: TimeZone>(dt: DateTime<Tz>) -> String {
-    dt.with_timezone(&Local)
-      .format("%m/%d/%Y at %I:%M:%S %p %Z")
-      .to_string()
 }
 
 /// Formats any DateTime into a string like:
