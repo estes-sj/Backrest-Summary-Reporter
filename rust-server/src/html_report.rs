@@ -67,6 +67,11 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
                 .map_or("-".to_string(), |v| v.to_string()),
         );
         entry = entry.replace(
+            "{{SNAPSHOT_DATA_ADDED}}",
+            &summary.data_added
+                .map_or("-".to_string(), |v| format_bytes(v as u64)),
+        );
+        entry = entry.replace(
             "{{SNAPSHOT_TOTAL_PROCESSED}}",
             &summary.total_bytes_processed
                 .map_or("-".to_string(), |v| format_bytes(v as u64)),
