@@ -8,7 +8,7 @@ use fs2::{free_space, total_space};
 use std::{fs, net::SocketAddr};
 use sqlx::{PgPool, Row};
 use crate::{
-    fail, ok, start,
+    fail, ok, start, warn,
     config::{Config},
     email::{EmailClient},
     healthcheck::{
@@ -495,6 +495,32 @@ pub async fn load_and_insert_storage_stats(
     for mount in mounts {
         let path = &mount.path;
         let nickname = mount.nickname.clone();
+
+        // empty directory check
+        match fs::read_dir(path) {
+            Ok(mut entries) => {
+                if entries.next().is_none() {
+                    warn!(
+                        &cfg.healthcheck_url,
+                        "Storage mounts error",
+                        "mount path '{}' is present but has no files, skipping this storage mount",
+                        path
+                    );
+                    continue;
+                }
+            }
+            Err(e) => {
+                // couldn't even read the directory
+                warn!(
+                    &cfg.healthcheck_url,
+                    "Storage mounts error",
+                    "failed to read mount path '{}': {}, skipping this storage mount",
+                    path,
+                    e
+                );
+                continue;
+            }
+        }
 
         // filesystem stats
         let total_bytes = total_space(path).map_err(|e| {

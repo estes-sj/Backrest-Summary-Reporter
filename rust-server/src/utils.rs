@@ -43,6 +43,45 @@ macro_rules! fail {
     }};
 }
 
+/// Log a warning, ping healthcheck(fail) with a combined message of
+/// **static** + **formatted** details. Returns nothing, unlike fail().
+///
+/// # Parameters
+/// - `healthcheck_url`
+///     The healthcheck URL to ping.
+/// - `static_msg`
+///     A **`&'static str`** that will be returned to the HTTP caller.
+/// - `format_args...`
+///     A `format!`-style string plus any arguments to build the **detailed** part.
+///
+/// # Usage
+/// ```ignore
+/// .map_err(|e| {
+///     fail!(
+///         healthcheck_url,
+///         "db error",                      // <-- static to client
+///         "DB insert {} failed: {}",       // <-- detailed for logs/ping
+///         path,
+///         e
+///     )
+/// })?
+/// ```
+#[macro_export]
+macro_rules! warn {
+    ($healthcheck_url:expr, $static_msg:expr, $fmt:expr, $($arg:tt)+) => {{
+        // build detailed message
+        let detail = format!($fmt, $($arg)+);
+        // combine with the static prefix
+        let combined = format!("{}: {}", $static_msg, detail);
+        tracing::error!("{}", combined);
+        crate::healthcheck::ping_healthcheck(
+            &$healthcheck_url,
+            crate::healthcheck::HealthStatus::Fail,
+            Some(&combined),
+        );
+    }};
+}
+
 /// Log an info, ping healthcheck(success) with a message of
 /// **formatted** details, but return nothing.
 ///

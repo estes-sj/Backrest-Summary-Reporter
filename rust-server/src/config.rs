@@ -3,7 +3,9 @@ use std::{env, net::SocketAddr};
 use anyhow::{Context, Result};
 use chrono::Local;
 use dotenv::dotenv;
-use tracing::warn;
+use crate::{
+    warn
+};
 
 /// Application configuration loaded from environment variables.
 #[derive(Clone)]
@@ -82,6 +84,9 @@ impl Config {
         let email_from    = env::var("EMAIL_FROM").ok();
         let email_to      = env::var("EMAIL_TO").ok();
 
+        // Optional healthchecks URL for status updates
+        let healthcheck_url = env::var("HEALTHCHECK_PING_URL").ok();
+
         // Optional startup email
         // Map the String to bool by lowercasing and comparing
         // Set to false as default
@@ -101,10 +106,12 @@ impl Config {
             match env::var(&key_path) {
                 Ok(path) if path.trim().is_empty() => {
                     warn!(
-                        "{} is set but empty, stopping storage mount configuration",
+                        healthcheck_url,
+                        "Storage mounts error",
+                        "{} is set but empty, skipping this storage mount configuration",
                         key_path
                     );
-                    break;
+                    continue;
                 }
                 Ok(path) => {
                     let key_nick = format!("STORAGE_NICK_{}", idx);
@@ -114,9 +121,6 @@ impl Config {
                 Err(_) => break,
             }
         }
-
-        // Optional healthchecks URL for status updates
-        let healthcheck_url = env::var("HEALTHCHECK_PING_URL").ok();
 
         // Optional misc. variables used for email reports
         let server_name = env::var("SERVER_NAME").ok();
