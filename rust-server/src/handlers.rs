@@ -16,7 +16,7 @@ use crate::{
         HealthStatus
     },
     html_report::{format_range_iso_with_offset, prune_old_reports, render_report_html, write_report_html},
-    models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, SummaryPayload, StorageReport},
+    models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, StorageStatsRequest, SummaryPayload, StorageReport},
 };
 
 ///
@@ -30,25 +30,25 @@ pub async fn add_event_handler(
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
     Json(payload): Json<SummaryPayload>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
     // 1) Auth
-    if let Err(e) = validate_api_key_with_ip(&headers, &cfg.auth_key, addr) {
-        return e;
-    }
+    validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // 2) Delegate to helper
-    match insert_summary_with_stats(&cfg, &pool, &payload).await {
-        Ok((summary_id, created)) => {
-            tracing::info!(
-                "Event with ID {} at {} from {}",
-                summary_id,
-                created.to_rfc3339(),
-                addr
-            );
-            (StatusCode::OK, "ok")
-        }
-        Err(err) => err,
-    }
+    // 2) Insert the new summary
+    let (summary_id, created) =
+        insert_summary_with_stats(&cfg, &pool, &payload).await?;
+
+    tracing::info!(
+        "Event with ID {} at {} from {}",
+        summary_id,
+        created.to_rfc3339(),
+        addr
+    );
+
+    // 3) Update the storage stats post-event
+    load_and_insert_storage_stats(&pool, &cfg).await?;
+
+    Ok((StatusCode::OK, "ok"))
 }
 
 /// POST `/get-events-in-range` endpoint.
@@ -143,13 +143,26 @@ pub async fn get_latest_storage_stats_handler(
     State((pool, cfg)): State<(PgPool, Config)>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    // 1) Auth
     validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
 
-    // 2) Delegate to our new helper
     let stats = load_storage_stats(&pool, &cfg).await?;
 
-    // 3) Return JSON
+    Ok((StatusCode::OK, Json(stats)))
+}
+
+/// POST `/get-storage-stats` endpoint.
+/// Retrieves the storage statistics for the provided end_date and its previous day, week, and month.
+pub async fn get_storage_stats_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State((pool, cfg)): State<(PgPool, Config)>,
+    headers: HeaderMap,
+    Json(req): Json<StorageStatsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+
+    validate_api_key_with_ip(&headers, &cfg.auth_key, addr)?;
+
+    let stats = load_storage_stats_at(&pool, &cfg, req.end_date).await?;
+
     Ok((StatusCode::OK, Json(stats)))
 }
 
@@ -177,7 +190,7 @@ pub async fn get_events_and_storage_stats_handler(
     load_and_insert_storage_stats(&pool, &cfg).await?;
     
     // 5) Get latest storage statistics
-    let storage_statistics = load_storage_stats(&pool, &cfg).await?;
+    let storage_statistics = load_storage_stats_at(&pool, &cfg, req.end_date).await?;
     
     // 6) Return the combined report
     let payload = GenerateReport {
@@ -209,7 +222,7 @@ pub async fn generate_and_send_email_report(
     let event_totals       = load_event_totals_report(&cfg, &pool, req.start_date, req.end_date).await?;
     let snapshot_summaries = fetch_combined_stats(&cfg, &pool, req.start_date, req.end_date).await?;
     load_and_insert_storage_stats(&pool, &cfg).await?;
-    let storage_stats      = load_storage_stats(&pool, &cfg).await?;
+    let storage_stats      = load_storage_stats_at(&pool, &cfg, req.end_date).await?;
 
     let report = GenerateReport {
         event_totals,
@@ -686,6 +699,135 @@ pub async fn load_storage_stats(
             let previous_month = priors[2].as_ref().map(|r| make_period(r));
 
             // use config nickname preferentially
+            let nickname = mount.nickname.clone().or(cur.storage_nickname.clone());
+
+            out.push(CurrentStorageStats {
+                location:       mount.path.clone(),
+                nickname,
+                current,
+                previous_day,
+                previous_week,
+                previous_month,
+            });
+        }
+    }
+
+    Ok(out)
+}
+
+/// Fetches all current + prior (day/week/month) stats for the given mounts 
+/// as of a particular end time.
+pub async fn load_storage_stats_at(
+    pool: &PgPool,
+    cfg: &Config,
+    end: DateTime<Utc>,
+) -> Result<Vec<CurrentStorageStats>, (StatusCode, &'static str)> {
+    let mounts = &cfg.storage_mounts;
+
+    // 1) Grab the latest row for each mount at-or-before `end`
+    let current_rows: Vec<DbStorageRow> = sqlx::query_as::<_, DbStorageRow>(
+        r#"
+        SELECT DISTINCT ON (storage_location)
+            storage_location,
+            storage_nickname,
+            storage_used_bytes,
+            storage_total_bytes,
+            time_added
+        FROM storage
+        WHERE time_added <= $1
+        ORDER BY storage_location, time_added DESC
+        "#,
+    )
+    .bind(end)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        fail!(
+            cfg,
+            "DB query error",
+            "current storage as of {}: {}",
+            end,
+            e
+        )
+    })?;
+
+    // 2) Helper for fetching the most‐recent-before a cutoff
+    async fn fetch_prior(
+        pool: &PgPool,
+        path: &str,
+        cutoff: DateTime<Utc>,
+    ) -> Result<Option<DbStorageRow>, sqlx::Error> {
+        sqlx::query_as::<_, DbStorageRow>(
+            r#"
+            SELECT
+                storage_location,
+                storage_nickname,
+                storage_used_bytes,
+                storage_total_bytes,
+                time_added
+            FROM storage
+            WHERE storage_location = $1
+              AND time_added <= $2
+            ORDER BY time_added DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(path)
+        .bind(cutoff)
+        .fetch_optional(pool)
+        .await
+    }
+
+    // 3) Build the response
+    let mut out = Vec::with_capacity(mounts.len());
+    for mount in mounts {
+        if let Some(cur) = current_rows
+            .iter()
+            .find(|r| &r.storage_location == &mount.path)
+        {
+            let make_period = |r: &DbStorageRow| PeriodStats {
+                used_bytes:   r.storage_used_bytes,
+                free_bytes:   r.storage_total_bytes.saturating_sub(r.storage_used_bytes),
+                total_bytes:  r.storage_total_bytes,
+                percent_used: if r.storage_total_bytes > 0 {
+                    (r.storage_used_bytes as f64 / r.storage_total_bytes as f64) * 100.0
+                } else {
+                    0.0
+                },
+                time_added:   r.time_added,
+            };
+
+            let current = make_period(cur);
+
+            // compute cutoffs off of the same `end` time
+            let cuts = [
+                ("day",   end - Duration::days(1)),
+                ("week",  end - Duration::weeks(1)),
+                ("month", end - Duration::days(30)),
+            ];
+
+            // fetch priors
+            let mut priors = [None, None, None];
+            for (i, &(_, cutoff)) in cuts.iter().enumerate() {
+                priors[i] = fetch_prior(pool, &mount.path, cutoff)
+                    .await
+                    .map_err(|e| {
+                        fail!(
+                            cfg,
+                            "DB error",
+                            "prior for {} at cutoff {:?}: {}",
+                            mount.path,
+                            cutoff,
+                            e
+                        )
+                    })?;
+            }
+
+            let previous_day   = priors[0].as_ref().map(|r| make_period(r));
+            let previous_week  = priors[1].as_ref().map(|r| make_period(r));
+            let previous_month = priors[2].as_ref().map(|r| make_period(r));
+
+            // pick nickname
             let nickname = mount.nickname.clone().or(cur.storage_nickname.clone());
 
             out.push(CurrentStorageStats {

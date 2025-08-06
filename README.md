@@ -136,7 +136,7 @@ At this point, you can [test additional endpoints](#endpoints) and setting up th
 | **RCLONE\_REMOTE**         | Your rclone remote name (must end with a colon, e.g. `google_drive:`)                                      | Optional                                            |
 | **RCLONE\_TARGET**         | Path inside the container where the rclone remote is mounted (e.g. `/mnt-rclone/google_drive`)             | Optional                                            |
 | **STORAGE\_PATH\_1–N**     | Inside-the-container paths where backup archives are located (e.g. `/mnt/opt`, `/mnt/mnt`)                 | Optional • At least one path if using storage stats |
-| **STORAGE\_NICK\_1–N**     | Friendly nickname for each storage path shown in reports (e.g. `sam-fedserver01-opt`, `External Drive 01`) | Optional • Defaults to path if blank                |
+| **STORAGE\_NICK\_1–N**     | Friendly nickname for each storage path shown in reports (e.g. `fedserver01-opt`, `External Drive 01`) | Optional • Defaults to path if blank                |
 | **SERVER\_NAME**           | Human-readable name of the server/environment used in email reports                                        | Optional                                            |
 | **BACKREST\_URL**          | URL to Backrest backup management UI/API used in email reports (e.g. `https://backrest.example.com/`)      | Optional                                            |
 | **PGADMIN\_URL**           | URL to pgAdmin database management interface used in email reports (e.g. `https://pgadmin.example.com/`)   | Optional                                            |
@@ -273,7 +273,7 @@ Now in the `.env`, we can specify the path to the volume inside the container (o
 # .env
 
 STORAGE_PATH_1=/mnt/opt
-STORAGE_NICK_1=sam-fedserver01-opt
+STORAGE_NICK_1=fedserver01-opt
 ```
 
 > [!TIP]
@@ -699,7 +699,7 @@ curl -X GET https://your-backrest-reporter-instance/get-latest-storage-stats \
 [
     {
         "location": "/mnt/opt",
-        "nickname": "sam-fedserver01-opt",
+        "nickname": "fedserver01-opt",
         "current": {
             "used_bytes": 181917847552,
             "free_bytes": 296481320960,
@@ -725,13 +725,77 @@ curl -X GET https://your-backrest-reporter-instance/get-latest-storage-stats \
     },
     {
         "location": "/mnt/mnt",
-        "nickname": "sam-fedserver01 External Drive 01",
+        "nickname": "fedserver01 External Drive 01",
         "current": {
             "used_bytes": 32433807360,
         ...
         }
       ...
     }
+]
+```
+
+### Get Storage Stats (Specific Date)
+Retrieves the latest storage statistics at a specific date and its previous day, week, and month.
+
+#### Example Input
+```bash
+curl -X GET https://your-backrest-reporter-instance/get-storage-stats \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: YOUR_API_KEY_FROM_ENV" \
+    -d '{
+        "end_date": "2025-07-05T12:42:12Z"
+    }'
+```
+
+#### Example Output
+```json
+[
+    {
+        "location": "/mnt-backup",
+        "nickname": "extdrive02 (Backups)",
+        "current": {
+            "used_bytes": 207065759744,
+            "free_bytes": 1753262551040,
+            "total_bytes": 1960328310784,
+            "percent_used": 10.56281024994163,
+            "time_added": "2025-07-05T11:23:15.042394Z"
+        },
+        "previous_day": {
+            "used_bytes": 206484578304,
+            "free_bytes": 1753843732480,
+            "total_bytes": 1960328310784,
+            "percent_used": 10.533163101716365,
+            "time_added": "2025-07-04T11:00:00.493426Z"
+        },
+        "previous_week": {
+            "used_bytes": 203562176512,
+            "free_bytes": 1756766134272,
+            "total_bytes": 1960328310784,
+            "percent_used": 10.384085940716163,
+            "time_added": "2025-06-28T12:14:55.262699Z"
+        },
+        "previous_month": {
+            "used_bytes": 191168102400,
+            "free_bytes": 1769160208384,
+            "total_bytes": 1960328310784,
+            "percent_used": 9.751841125201398,
+            "time_added": "2025-06-05T11:00:00.364751Z"
+        }
+    },
+    {
+        "location": "/mnt-rclone/google_drive",
+        "nickname": "rclone01",
+        "current": {
+            "used_bytes": 28077682688,
+            "free_bytes": 79296499712,
+            "total_bytes": 107374182400,
+            "percent_used": 26.14937973022461,
+            "time_added": "2025-07-05T11:23:15.273657Z"
+        },
+        ...
+    },
+    ...
 ]
 ```
 
