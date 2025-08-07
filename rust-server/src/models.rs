@@ -43,10 +43,16 @@ pub struct SummaryPayload {
     pub snapshot_stats:  Option<SnapshotStats>,
 }
 
-/// New request type for stats
+/// Request type for snapshot event stats
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatsRequest {
     pub start_date: DateTime<Utc>,
+    pub end_date:   DateTime<Utc>,
+}
+
+/// Request type for storage stats
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StorageStatsRequest {
     pub end_date:   DateTime<Utc>,
 }
 
