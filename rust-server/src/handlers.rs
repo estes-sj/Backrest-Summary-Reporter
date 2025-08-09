@@ -17,6 +17,7 @@ use crate::{
     },
     html_report::{format_range_iso_with_offset, prune_old_reports, render_report_html, write_report_html},
     models::{CombinedStats, CurrentStorageStats, DbStorageRow, EventTotals, EventTotalsReport, GenerateReport, PeriodStats, StatsRequest, StorageStatsRequest, SummaryPayload, StorageReport},
+    utils::{format_local_datetime},
 };
 
 ///
@@ -104,9 +105,8 @@ pub async fn send_test_email_handler(
     let mut html = fs::read_to_string("html/test_email.html")
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read HTML file"))?;
 
-    // 4) Modify the timestamp
-    let timestamp = Local::now().format("%d/%m/%Y at %I:%M %p").to_string();
-    html = html.replace("{{TIMESTAMP}}", &timestamp);
+    // 4) Modify the fields
+    html = html.replace("{{TIMESTAMP}}", &format_local_datetime(Local::now()));
     html = html.replace("{{BACKREST_URL}}", &cfg.backrest_url.clone().unwrap_or_default());
     html = html.replace("{{PGADMIN_URL}}", &cfg.pgadmin_url.clone().unwrap_or_default());
 

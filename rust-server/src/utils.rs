@@ -1,4 +1,5 @@
 use axum::http::StatusCode;
+use chrono::{DateTime, Local, Offset, TimeZone};
 use std::fs;
 
 /// Log a failure, ping healthcheck(fail) with a combined message of
@@ -146,4 +147,12 @@ pub fn container_id_from_hostname() -> String {
     fs::read_to_string("/etc/hostname")
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|_| "Unknown".into())
+}
+
+/// Formats any DateTime into a local time string as:
+/// "MM/DD/YYYY at hh:mm:ss AM/PM ZZZ"
+pub fn format_local_datetime<Tz: TimeZone>(dt: DateTime<Tz>) -> String {
+    dt.with_timezone(&Local)
+      .format("%m/%d/%Y at %I:%M:%S %p %Z")
+      .to_string()
 }
