@@ -109,6 +109,7 @@ pub async fn send_test_email_handler(
     html = html.replace("{{TIMESTAMP}}", &format_local_datetime(Local::now()));
     html = html.replace("{{BACKREST_URL}}", &cfg.backrest_url.clone().unwrap_or_default());
     html = html.replace("{{PGADMIN_URL}}", &cfg.pgadmin_url.clone().unwrap_or_default());
+    html = html.replace("{{VERSION}}", &cfg.version.to_string());
 
     // 5) Build the email and send
     client.send_html("🚀 Test Email", html, &cfg).await?;

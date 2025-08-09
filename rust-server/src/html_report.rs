@@ -123,6 +123,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
         format_local_offset(report.event_totals.current.start_date),
     ));
     replacements.push(("{{REPORT_GENERATION_DATE}}", format_local_datetime(now)));
+    replacements.push(("{{VERSION}}", cfg.version.to_string()));
 
     // Event totals (current)
     let et = &report.event_totals.current;
