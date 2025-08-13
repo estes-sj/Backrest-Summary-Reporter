@@ -250,7 +250,14 @@ pub async fn generate_and_send_email_report(
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to prune old reports"))?;
     
     let client = EmailClient::from_config(&cfg)?;
-    client.send_html(&format!("🚀 Backup Summary ({})", format_range_iso_with_offset(req.start_date, req.end_date)), html, &cfg).await?;
+    let current = &report.event_totals.current;
+    let emoji = status_emoji_for_event_totals(&report.event_totals.current);
+    let subject = format!(
+        "{} Backup Summary ({})",
+        emoji,
+        format_range_iso_with_offset(req.start_date, req.end_date)
+    );
+    client.send_html(&subject, html, &cfg).await?;
 
     ok!(cfg, "Report email sent{}", "");
     Ok((StatusCode::OK, "Report email sent"))
@@ -870,4 +877,30 @@ pub fn validate_api_key_with_ip(
     }
 
     Ok(())
+}
+
+/// Returns:
+///  - ❌ if there are any errors,
+///  - ⚠️ if there are no errors but there are warnings,
+///  - ✅ if there are neither warnings nor errors.
+pub fn status_emoji_for_event_totals(et: &EventTotals) -> &'static str {
+    let total_errors =
+          et.total_snapshot_error
+        + et.total_forget_error
+        + et.total_prune_error
+        + et.total_check_error;
+    if total_errors > 0 {
+        "❌"
+    } else {
+        let total_warnings =
+              et.total_snapshot_warning
+            + et.total_forget_warning
+            + et.total_prune_warning
+            + et.total_check_warning;
+        if total_warnings > 0 {
+            "⚠️"
+        } else {
+            "✅"
+        }
+    }
 }
