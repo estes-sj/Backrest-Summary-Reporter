@@ -377,10 +377,13 @@ The below example shows the rclone `docker-compose.yaml` service that uses a pre
 
 To create an rclone config, see the [official rclone docs](https://rclone.org/commands/rclone_config/) for more info.
 
+> [!IMPORTANT]
+> If using auto-update services, such as [Watchtower](https://containrrr.dev/watchtower/), it is recommended to add the rclone-mounter service as an exception or to not use `rclone:latest`. Auto-updates to `rclone` will cause the mount to no longer be populated on both `backrest` and the `backrest-reporter` until they are restarted. The example below hard sets it to `rclone:1.70.3`.
+
 ```yaml
   # Rclone container that handles mounting Google Drive via FUSE
   rclone-mounter:
-    image: rclone/rclone:latest
+    image: rclone/rclone:1.70.3
     container_name: rclone-mounter
     restart: unless-stopped
     cap_add:
