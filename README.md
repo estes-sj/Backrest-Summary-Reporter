@@ -16,11 +16,11 @@ A companion service for Backrest Restic that tracks snapshot activity and storag
 
 ## Backrest and Backrest Reporter Events
 
-Below are the main events that regularly occur during this process.
+Below are the recurring main events.
 
 ### Backup Initiated by Backrest
 
-When Backrest starts or completes a snapshot, forget, check, or prune, it calls the [`/add-event` endpoint](#add-snapshot-event). All the available data provided during the Backrest hook is sent and stored in the API's database.
+When Backrest starts or completes a snapshot, forget, check, or prune, it calls the [`/add-event` endpoint](#add-snapshot-event). All of the available data provided during the Backrest hook is sent and stored in the API's database.
 
 ```mermaid
 flowchart TD
@@ -62,7 +62,7 @@ flowchart TD
     A["Cron Schedule"]
     A -->|"Default: 0 0 * * *"| B["Storage Check Trigger"]
     B --> C["Execute Storage Check"]
-    C -->|"/storage_stats Endpoint"| D{"Get and Save Storage Stats"}
+    C -->|"/storage_stats Endpoint"| D{"Query and Save Storage Stats"}
 
     subgraph Storage_Paths
         E["Defined in .env"]
@@ -77,9 +77,9 @@ flowchart TD
 
 ### Email Reports
 
-Email reports occur based on the `EMAIL_FREQUENCY` defined in the `.env` and use the [`/generate-and-send-email-report` endpoint](#generate-and-send-email-report). They use the provided SMTP settings and current db to send a formatted report for all the restic events captured in the last `STATS_INTERVAL`. `STATS_INTERVAL` is defined in the `.env` and defaults to `24`, which translates to data received in the past 24 hours.
+Email reports occur using the `EMAIL_FREQUENCY` defined in the `.env` and use the [`/generate-and-send-email-report` endpoint](#generate-and-send-email-report). They use the provided SMTP settings and current database to send a formatted report for all the restic events captured in the last `STATS_INTERVAL`. `STATS_INTERVAL` is defined in the `.env` and defaults to `24`, which translates to data within the past 24 hours.
 
-Storage statistics are also refreshed before querying the statistics for the latest, previous day, previous week, and previous month endpoint.
+Storage statistics are refreshed before querying the statistics for the latest, previous day, previous week, and previous month's endpoint.
 
 Email reports can also be manually called via the [`/generate-and-send-email-report` endpoint](#generate-and-send-email-report).
 
@@ -104,7 +104,7 @@ flowchart TD
 
         subgraph Storage Statistics
             S1["Refresh Latest Storage Stats"]
-            S2["Query Current, Previous Day, Previous Week, and Previous Month"]
+            S2["Query Latest, Previous Day, Previous Week, and Previous Month"]
         end
 
     end
@@ -124,12 +124,12 @@ flowchart TD
 
 ## Main Setup
 
-This companion is meant to run via docker and alongside a Backrest setup. Additional configuration is covered under [Backrest Webhooks](#backrest-webhooks), [Setting up SMTP Settings](#setting-up-smtp-settings), [Setting up Storage Mounts](#setting-up-storage-mounts), and [Healthchecks](#healthchecks).
+This companion runs via Docker and alongside a Backrest setup. Additional configuration is covered under [Backrest Webhooks](#backrest-webhooks), [Setting up SMTP Settings](#setting-up-smtp-settings), [Setting up Storage Mounts](#setting-up-storage-mounts), and [Healthchecks](#healthchecks).
 
-### Pre-requisites
+### Prerequisites
 - [Docker](https://docs.docker.com/engine/install/)
 - [Backrest](https://github.com/garethgeorge/backrest)
-- FUSE (optional - for remote mounts)
+- FUSE (optional for supporting remote mounts)
 
 ### Docker Compose
 
@@ -162,10 +162,10 @@ At this point, you can [test additional endpoints](#endpoints) and setting up th
 | **EMAIL\_FROM**            | Email address and display name emails will be sent from (e.g. `Your App Name <you@example.com>`)           | Required                                            |
 | **EMAIL\_TO**              | Comma-separated list of recipient email addresses                                                          | Required                                            |
 | **SEND\_STARTUP\_EMAIL**   | Flag for sending email when system is first online. Set to `TRUE` or `1` to enable.                        | Optional • Default: None (`False`)                                           |
-| **EMAIL\_FREQUENCY**       | Cron schedule in UTC (e.g., `0 0 0 * * *` runs daily at midnight UTC)                                      | Optional • Default: `0 0 0 * * *`                   |
-| **STATS\_INTERVAL**        | Interval (in hours) of backup data to include in the email (e.g., `24` = last 24 hours)                    | Optional • Default: `24`                            |
+| **EMAIL\_FREQUENCY**       | Cron schedule in UTC (e.g. `0 0 0 * * *` runs daily at midnight UTC)                                      | Optional • Default: `0 0 0 * * *`                   |
+| **STATS\_INTERVAL**        | Interval (in hours) of backup data to include in the email (e.g. `24` = last 24 hours)                    | Optional • Default: `24`                            |
 | **NUM\_RETAINED\_REPORTS** | Number of retained reports stored; oldest are deleted first when exceeding this number                     | Optional • Default: `10`                            |
-| **HEALTHCHECK\_PING\_URL** | Optional healthcheck URL (e.g., `https://hc-ping.com/ping/...`)                                            | Optional                                            |
+| **HEALTHCHECK\_PING\_URL** | Optional healthcheck URL (e.g. `https://hc-ping.com/ping/...`)                                            | Optional                                            |
 | **RCLONE\_REMOTE**         | Your rclone remote name (must end with a colon, e.g. `google_drive:`)                                      | Optional                                            |
 | **RCLONE\_TARGET**         | Path inside the container where the rclone remote is mounted (e.g. `/mnt-rclone/google_drive`)             | Optional                                            |
 | **STORAGE\_PATH\_1–N**     | Inside-the-container paths where backup archives are located (e.g. `/mnt/opt`, `/mnt/mnt`)                 | Optional • At least one path if using storage stats |
@@ -185,7 +185,7 @@ See a full example `docker-compose.yaml` for building from source [here](docker-
 
 To provide all the necessary information to the Backrest reporter, go into your Backrest instance and modify the webhook settings of your plans/repos.
 
-For `Available Conditions`, you can add more but should at a minimum include:
+For `Available Conditions`, you should at a minimum include:
 - `CONDITION_SNAPSHOT_SUCCESS`
 - `CONDITION_SNAPSHOT_ERROR`
 - `CONDITION_SNAPSHOT_START`
@@ -195,7 +195,7 @@ For `Available Conditions`, you can add more but should at a minimum include:
 - `CONDITION_FORGET_START`
 - `CONDITION_FORGET_END`
 
-For `Script`, use the following, replacing the endpoint URL to your instance and the API key to the one in your `.env`.
+Use the following for `Script`, replacing the endpoint URL to your instance and the API key to the one in your `.env`.
 
 ```bash
 curl -X POST https://your-backrest-reporter-instance/add-event \
@@ -215,11 +215,11 @@ curl -X POST https://your-backrest-reporter-instance/add-event \
 EOF
 ```
 
-Once saved, snapshot events should start being sent to the Backrest Reporter API.
+Once saved, future snapshot events will send to the Backrest Reporter API.
 
-## Setting up SMTP Settings
+## Configuring SMTP Settings
 
-To enable email reporting, you must configure the SMTP settings in the `.env` file. This section will walk you through setting up SMTP using a Gmail account.
+To enable email reporting, you must configure the SMTP settings in the `.env` file. This section will walk you through using a Gmail account.
 
 ### Using Gmail SMTP
 
@@ -230,13 +230,13 @@ Gmail provides SMTP access for sending emails from external applications. Follow
 If you have 2-Step Verification enabled (highly recommended), you must create an [App Password](https://myaccount.google.com/apppasswords):
 
 1. Go to [Google Account Security](https://myaccount.google.com/security).
-2. Under **"Signing in to Google"**, enable **2-Step Verification** (if not already enabled).
+2. Under **Signing in to Google**, enable **2-Step Verification** (if not already enabled).
 3. After that, a new **App passwords** option appears.
-4. Select **Mail** and your device name (e.g., “Backup Server”), then generate the password.
-5. Copy the 16-character password provided (you’ll use this instead of your Gmail password in the `.env`).
+4. Select **Mail** and your device name (e.g. Backup Server), then generate the password.
+5. Copy the 16-character password provided (you will use this instead of your Gmail password in the `.env`).
 
 > [!IMPORTANT]
-> Do not use your main Gmail password for SMTP; always use an app password.
+> For security, do not use your main Gmail password for SMTP; **always use an app password**.
 
 #### 2. **Configure `.env` SMTP Settings**
 
@@ -274,10 +274,10 @@ You can also enable `SEND_STARTUP_EMAIL` in your `.env` by setting it to `TRUE` 
 
 ### Tips
 
-* Gmail limits the number of emails you can send per day. If you’re hitting limits, consider using another SMTP provider (e.g., SendGrid, Mailgun, etc.).
-* If you see a “less secure app” warning, verify you’re using an App Password, and 2FA is enabled.
+* Gmail limits the number of emails you can send per day. If you are hitting limits, consider using another SMTP provider (e.g. SendGrid, Mailgun, etc.).
+* If you see a “less secure app” warning, verify you are using an App Password, and 2FA is enabled.
 
-## Setting up Storage Mounts
+## Setting Up Storage Mounts
 Storage mounts are mounted to the main API service to track and send storage statistics. Currently, this has been tested to work for local drives, local network drives via SSHFS, and rclone via FUSE.
 
 Once exposed to the API container, storage paths can be tracked and recorded by adding them to the `.env` and/or `docker-compose.yaml`.
@@ -300,7 +300,7 @@ For these, the folder or any of its parents must be mounted in the volumes secti
       - /opt:/mnt/opt:ro
 ```
 
-Now in the `.env`, we can specify the path to the volume inside the container (or any of its children) that we want to track. Additionally, we can specify an optional nickname that is used in the emails. If no nickname is used, the path will be used.
+Now in the `.env`, we can specify the path to the volume inside the container, or any of its children, that we want to track. Additionally, we can specify an optional nickname that is used in the emails. If no nickname is used, the path will be used.
 
 ```conf
 # .env
@@ -310,26 +310,26 @@ STORAGE_NICK_1=fedserver01-opt
 ```
 
 > [!TIP]
-> The paths are used as the key, which means that you should only not re-use the same internal container path for other storage devices. Instead, use a unique path to start with a clean slate. Nicknames can be changed at any time and the most recent one will always be used.
+> The paths are used as the key, meaning you should not re-use the same internal container path for other storage devices. Instead, use a unique path to start with a clean slate. Nicknames can be changed at any time and the most recent one will always be used.
 
 #### External Drives (Linux)
 
 Externally connected drives, such as a USB external HDD, are recommended to be mounted via `fstab` to ensure they are available on system boot.
 
-One way to do this is:
+One way to mount is:
 
 1. Connect the drive to the host machine.
 2. Run `lsblk -f` to list the names, fs types, UUID, and mount points.
-3. Find the drive you want to connect and copy its UUID, where you want to mount it to and the fs type.
+3. Find the drive you want to connect and copy its UUID, where you want to mount it to, and the fs type.
 4. Edit `/etc/fstab` to include a line for your new entry. An example of mounting to `/mnt`:
    ```
    UUID=f6b99246-8780-e989-9bb6-94211a0f0f50  /mnt  ext4  defaults  0  2
    ```
-5. Save the file and apply with `mount -a`.
+5. Save the file and apply the changes with `mount -a`.
 
 ### Local Network Drives
 
-Let's say there's a drive on another machine that is on the same local network as the host machine. One way of tracking it is through `SSHFS`. First, we need to make sure we have this installed.
+One way of tracking another machine that is on the same local network as the host machine is through `SSHFS`. First, ensure this is installed.
 
 **Fedora**
 ```bash
@@ -343,12 +343,12 @@ sudo apt-get install sshfs
 
 Then, we can similarly auto-mount via `fstab` as we did with locally connected drives.
 1. Connect the drive to the machine on the local network and follow the steps on that machine for [external drives Linux](#external-drives-linux) if it needs to be added to that `fstab`.
-2. Get the local ip address of the machine with `ifconfig`.
-3. On the host machine, generate an SSH key if you don't already have one.
+2. Obtain the local ip address of the machine using `ifconfig`.
+3. On the host machine, generate an SSH key if you do not already have one.
    ```bash
    ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
    ```
-4. Press Enter to accept default file location (`~/.ssh/id_rsa`)
+4. Press **Enter** to accept default file location (`~/.ssh/id_rsa`)
 5. Copy the Public Key to Machine 2:
    ```bash
    ssh-copy-id user@machine2_ip_or_hostname
@@ -366,16 +366,16 @@ Then, we can similarly auto-mount via `fstab` as we did with locally connected d
 
 ### Rclone Mounts
 
-Rclone mounts, such as Google Drive, are supported by an `rclone-mounter` container that uses FUSE connections to mount the cloud connection to a shared directory across the rclone container, the host machine, and the API container. To make sure the FUSE mount is properly created and mounted, a healthcheck is used to prevent starting the API container until ready.
+Rclone mounts, such as Google Drive, are supported by a `rclone-mounter` container that uses FUSE connections to mount the cloud connection to a shared directory across the rclone container, the host machine, and the API container. To make sure the FUSE mount is properly created and mounted, a healthcheck is used to prevent starting the API container until it is ready.
 
 See a full example `docker-compose.yaml` for rclone mounts [here](docker-examples/docker-compose-rclone.yaml).
 
 The below example shows the rclone `docker-compose.yaml` service that uses a pre-configured Google Drive mount `google_drive`. The pre-configured `rclone.conf` is stored in `./rclone/config` on the host machine.
 
 > [!IMPORTANT]
-> For these FUSE mounts to work, the folder to mount to on the host machine must exist. In the example configuration, you would need to run `sudo mkdir -p /mnt-rclone/google_drive` before running the first time (if it doesn't already exist). ❗❗
+> For these FUSE mounts to work, the folder must exist on the host machine. In the example configuration, you will need to run `sudo mkdir -p /mnt-rclone/google_drive` before running it for the first time (if it does not already exist). ❗❗
 
-To create an rclone config, see the [official rclone docs](https://rclone.org/commands/rclone_config/) for more info.
+To create an rclone config, see the [official rclone docs](https://rclone.org/commands/rclone_config/) for more information.
 
 > [!IMPORTANT]
 > If using auto-update services, such as [Watchtower](https://containrrr.dev/watchtower/), it is recommended to add the rclone-mounter service as an exception or to not use `rclone:latest`. Auto-updates to `rclone` will cause the mount to no longer be populated on both `backrest` and the `backrest-reporter` until they are restarted. The example below hard sets it to `rclone:1.70.3`.
@@ -398,14 +398,14 @@ To create an rclone config, see the [official rclone docs](https://rclone.org/co
         source: ./rclone/config
         target: /config/rclone
 
-      # Optional: cache directory for VFS (improves stability/performance)
+      # Optional: cache directory for VFS (improves stability and performance)
       - type: bind
         source: ./rclone/vfs-cache
         target: /config/rclone/vfs-cache
 
-      # Mountpoint shared with host and other containers (Google Drive)
+      # Mountpoint shared with host and other containers (e.g. Google Drive)
       # Ensure the folder exists on the host machine before running
-      # e.g. sudo mkdir -p /mnt-rclone/google_drive
+      #   e.g. sudo mkdir -p /mnt-rclone/google_drive
       - type: bind
         source: /path/to/desired/host/location # Mounted to the API container
         target: /mnt-rclone/google_drive
@@ -427,13 +427,13 @@ To create an rclone config, see the [official rclone docs](https://rclone.org/co
 ```
 
 > [!IMPORTANT]
-> If the main Backrest container will be accessing this mount, it may be best to ensure it is included in the compose file. This ensures that restarts to the rclone container do not break accessibility within the Backrest service. An example docker compose with Backrest included can be found [here](docker-examples/docker-compose-backrest.yaml).
+> If the main Backrest container will be accessing this mount, it may be best practice to ensure it is included in the compose file. This ensures that restarts to the rclone container do not break accessibility within the Backrest service. An example docker compose with Backrest included can be found [here](docker-examples/docker-compose-backrest.yaml).
 
 ## Healthchecks
 
-[Healthchecks](https://healthchecks.io/) can be optionally setup via the `.env`, specifically `HEALTHCHECK_PING_URL`.
+[Healthchecks](https://healthchecks.io/) are recommended to setup via the `.env` using `HEALTHCHECK_PING_URL`.
 
-Setting this up is useful for catching failed endpoints and successful scheduled endpoints.
+This setup helps by catching failed and successful scheduled endpoints.
 
 <p align="center">
     <img src="docs/img/healthchecks_screenshot.png" alt="Storage Stats" width="60%"/>
@@ -445,9 +445,9 @@ Since the storage stats update runs daily, the recommended period is ***1 day***
 
 ### Backing Up (SQL File)
 
-Assuming you’ve already `cd`ed into the folder with your `docker-compose.yaml` and your `.env` (containing `DB_USERNAME` and `DB_PASSWORD`), follow the instructions below for backing up.
+Once you have `cd`ed into the folder with your `docker-compose.yaml` and your `.env` (containing `DB_USERNAME` and `DB_PASSWORD`), follow the instructions below for backing up.
 
-1. **Run the dump** (writes `backrest-reporter-db.sql` into your `./backups` directory):
+1. **Run the database dump** (writes `backrest-reporter-db.sql` into your `./backups` directory):
    ```bash
    docker exec \
      -e PGPASSWORD="$DB_PASSWORD" \
@@ -457,7 +457,7 @@ Assuming you’ve already `cd`ed into the folder with your `docker-compose.yaml`
        -d backrest-reporter-db \
      > ./backups/backrest-reporter-db_$(date +%F).sql
    ```
-   * `-e PGPASSWORD=…` injects your password so `pg_dump` won’t prompt you.
+   * `-e PGPASSWORD=…` injects your password so `pg_dump` will not prompt you.
    * `-U "$DB_USERNAME"` uses the same user you set in your `.env`.
    * `-d backrest-reporter-db` is the database name you set with `POSTGRES_DB`.
    * The `> ./backups/...` on the host side writes the output into your new `backups` folder, with today’s date in the filename.
@@ -541,7 +541,7 @@ docker exec \
 
 ### Restoring Later (Template)
 
-When you need to restore in the future, just update the variables and dump filename:
+When you need to restore in the future, update the variables and dump filename:
 
 ```bash
 export DB_CONTAINER=backrest-reporter-db
@@ -585,7 +585,7 @@ curl -X POST https://your-backrest-reporter-instance/send-test-email \
 
 ### Add Snapshot Event
 
-Inserts snapshot summary and statistics into the database. This is what Backrest uses for adding snapshot events.
+This inserts snapshot summary and statistics into the database. Backrest and [Docker Rsync Cron](https://github.com/estes-sj/rsync-cron-docker) use this for adding snapshot events.
 
 #### Example Input
 With `path-to-example.json` containing the mock event data.
@@ -598,7 +598,7 @@ curl -X POST https://your-backrest-reporter-instance/add-event \
 
 ### Get Events in Range
 
-Takes in a start and end date, returns the snapshot events between the provided times.
+Get events takes in a start and end date and returns the snapshot events between the provided times.
 
 #### Example Input
 Querying the events between `2025-05-02T15:13:00Z` and `2025-05-03T15:13:21Z`.
@@ -654,7 +654,7 @@ All events recorded within the provided time.
 
 ### Get Events in Range Totals
 
-Takes in a start and end date, returns the summarized event data between the provided times, the prior day, prior week, and prior month.
+Gets events takes in a start and end date and returns the summarized event data between the provided times, the prior day, prior week, and prior month.
 
 #### Example Input
 Querying the summaries between `2025-05-02T15:13:00Z` and `2025-05-03T15:13:21Z` and its historical data for comparison.
@@ -724,7 +724,7 @@ curl -X GET https://your-backrest-reporter-instance/update-storage-statistics \
 ```
 
 ### Get Latest Storage Stats
-Retrieves the latest storage statistics and its previous day, week, and month.
+This retrieves the latest storage statistics along with its previous day, week, and month.
 
 #### Example Input
 ```bash
@@ -839,7 +839,11 @@ curl -X GET https://your-backrest-reporter-instance/get-storage-stats \
 ```
 
 ### Get Events and Storage Stats
-Takes in a start_date and end_date, returns the event totals between the provided times, the queried data between the provided times, updates the configured storage mounts with the latest statistics, and retrieves the latest storage statistics and its previous day, week, and month.
+Takes in a `start_date` and `end_date` and:
+* Returns the event totals between the provided times
+* Returns the queried data between the provided times
+* Updates the configured storage mounts with the latest statistics
+* Returns the latest storage statistics and its previous day, week, and month
 
 #### Example Input
 ```bash
@@ -893,7 +897,11 @@ curl -X POST https://your-backrest-reporter-instance/get-events-and-storage-stat
 ```
 
 ### Generate and Send Email Report
-Takes in a start_date and end_date, returns the event totals between the provided times, the queried data between the provided times, updates the configured storage mounts with the latest statistics, and retrieves the latest storage statistics and its previous day, week, and month.
+Receives a `start_date` and `end_date` and:
+* Returns the event totals between the provided times
+* Returns the queried data between the provided times
+* Updates the configured storage mounts with the latest statistics
+* Returns the latest storage statistics and its previous day, week, and month
 
 #### Example Input
 ```bash
