@@ -16,7 +16,7 @@ services:
 
   # Rclone container that handles mounting Google Drive via FUSE
   rclone-mounter:
-    image: rclone/rclone:latest
+    image: rclone/rclone:1.70.3
     container_name: rclone-mounter
     restart: unless-stopped
     cap_add:

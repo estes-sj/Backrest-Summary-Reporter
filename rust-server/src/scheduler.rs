@@ -8,7 +8,7 @@ use crate::{
     fail, ok,
     config::Config,
     email::{EmailClient},
-    utils::{container_id_from_hostname},
+    utils::{container_id_from_hostname, format_local_datetime},
 };
 
 
@@ -52,12 +52,11 @@ pub async fn spawn_email_report_cron(cfg: Config) {
                         }
                     };
                     
-                    // Replace any placeholders—e.g. timestamp, URLs, etc.
+                    // Replace any placeholders e.g. timestamp, URLs, etc.
                     html = html.replace("{{HOSTNAME}}", &container_id_from_hostname());
                     html = html.replace("{{NEXT_REPORT}}", &next_local.format("%a, %b %e %Y at %I:%M:%S %p %:z").to_string());
                     
-                    let timestamp_str = Local::now().format("%d/%m/%Y at %I:%M %p").to_string();
-                    html = html.replace("{{TIMESTAMP}}", &timestamp_str);
+                    html = html.replace("{{TIMESTAMP}}", &format_local_datetime(Local::now()));
                     html = html.replace(
                         "{{BACKREST_URL}}",
                         &cfg.backrest_url.clone().unwrap_or_default(),
@@ -66,9 +65,10 @@ pub async fn spawn_email_report_cron(cfg: Config) {
                         "{{PGADMIN_URL}}",
                         &cfg.pgadmin_url.clone().unwrap_or_default(),
                     );
-                    
+                    html = html.replace("{{VERSION}}", &cfg.version.to_string());
+
                     // Build and send the email
-                    if let Err(err) = client.send_html("🚀 Server Startup", html, &cfg).await {
+                    if let Err(err) = client.send_html("🎉 Server Startup", html, &cfg).await {
                         error!("Failed to send startup email: {:?}", err);
                     } else {
                         info!(

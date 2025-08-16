@@ -10,6 +10,8 @@ use crate::{
 /// Application configuration loaded from environment variables.
 #[derive(Clone)]
 pub struct Config {
+    /// Application version, pulled from Cargo.toml
+    pub version: &'static str,
     /// Postgres connection URL
     pub database_url: String,
     /// API authorization key
@@ -59,6 +61,9 @@ impl Config {
     pub fn from_env() -> Result<Self> {
         // Load .env file if present
         dotenv().ok();
+
+        // Code version number - pulled from Cargo.toml
+        let version = env!("CARGO_PKG_VERSION");
 
         // Required variables
         let database_url = env::var("DATABASE_URL")
@@ -141,6 +146,7 @@ impl Config {
             .unwrap_or(10);
 
         Ok(Config {
+            version,
             database_url,
             auth_key,
             listen_addr,
