@@ -539,12 +539,15 @@ pub fn format_range_iso_with_offset<Tz: TimeZone>(
 /// Formats a percentage change between a current and optional previous value:
 /// - Returns "↑x.xx%" if increased
 /// - Returns "↓x.xx%" if decreased
-/// - Returns "–" if no previous value is available
+/// - Returns "-" if no previous value is available
 fn fmt_percent_change(current: f64, previous_opt: Option<f64>) -> String {
     if let Some(prev) = previous_opt {
-        let diff = current - prev;
-        let arrow = if diff >= 0.0 { "↑" } else { "↓" };
-        format!("{}{:.2}%", arrow, diff.abs())
+        if prev == 0.0 {
+            return "-".to_string(); // avoid divide by zero
+        }
+        let percent_change = ((current - prev) / prev) * 100.0;
+        let arrow = if percent_change >= 0.0 { "↑" } else { "↓" };
+        format!("{}{:.2}%", arrow, percent_change.abs())
     } else {
         "-".to_string()
     }
