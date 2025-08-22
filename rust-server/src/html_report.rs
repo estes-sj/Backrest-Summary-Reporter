@@ -7,6 +7,7 @@ use std::{fs, path::Path};
 use crate::{
     config::Config,
     models::{CurrentStorageStats, EventTotals, GenerateReport},
+    utils::{format_local_datetime},
 };
 
 /// Renders the full report email, replacing placeholders in the template.
@@ -122,6 +123,7 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
         format_local_offset(report.event_totals.current.start_date),
     ));
     replacements.push(("{{REPORT_GENERATION_DATE}}", format_local_datetime(now)));
+    replacements.push(("{{VERSION}}", cfg.version.to_string()));
 
     // Event totals (current)
     let et = &report.event_totals.current;
@@ -480,14 +482,6 @@ fn format_bytes(bytes: u64) -> String {
     } else {
         format!("{} B", bytes)
     }
-}
-
-/// Formats any DateTime into a local time string as:
-/// "MM/DD/YYYY at hh:mm:ss AM/PM ZZZ"
-fn format_local_datetime<Tz: TimeZone>(dt: DateTime<Tz>) -> String {
-    dt.with_timezone(&Local)
-      .format("%m/%d/%Y at %I:%M:%S %p %Z")
-      .to_string()
 }
 
 /// Formats any DateTime into a string like:
