@@ -1,5 +1,5 @@
 # Builder stage – use a Rust image and install native tools
-FROM rust:1.82 AS builder
+FROM rust:1.88 AS builder
 
 # Install CMake, C/C++ toolchain, pkg-config, and SSL headers so prost-build can compile Protobuf
 RUN apt-get update \
