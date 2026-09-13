@@ -360,7 +360,7 @@ Then, we can similarly auto-mount via `fstab` as we did with locally connected d
    ```
 7. Edit `/etc/fstab` to include a line for your new entry for mounting via `SSHFS` and your working SSH key. An example of mounting to `/mnt/immich_remote` for the user `user`, ip `192.168.10.44`, and remote's `/mnt/.immich`:
    ```
-   user@192.168.10.44:/mnt/.immich /mnt/immich_remote fuse.sshfs ro,allow_other,_netdev,IdentityFile=/root/.ssh/id_rsa,users,idmap=user,follow_symlinks 0 0
+   user@192.168.10.44:/mnt/.immich /mnt/immich_remote fuse.sshfs ro,allow_other,_netdev,IdentityFile=/root/.ssh/id_rsa,users,idmap=user,follow_symlinks,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 0 0
    ```
 8. Save the file and apply with `mount -a`.
 

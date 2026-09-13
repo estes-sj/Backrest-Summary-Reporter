@@ -37,11 +37,15 @@ use scheduler::{
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    eprintln!("DEBUG: rust-server starting...");
+    
     // Initialize logging
     fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_ansi(false)
         .init();
+
+    tracing::info!("Logging initialized");
 
     // Load config & DB
     let cfg = Config::from_env()?;
