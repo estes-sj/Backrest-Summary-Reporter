@@ -1,0 +1,15 @@
+.env
+.git
+
+backups/
+db/
+logs/
+rclone/
+reports/
+tests/
+
+rust-server/target/
+
+docker-compose*.yaml
+docker-examples/
+docs/

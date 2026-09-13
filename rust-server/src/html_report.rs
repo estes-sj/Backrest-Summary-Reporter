@@ -363,10 +363,10 @@ fn render_storage_entry(template: &str, stat: &CurrentStorageStats) -> String {
         ("{{PERCENT_FREE_CURRENT}}", format!("{:.2}", 100.0 - stat.current.percent_used)),
         ("{{USED_SPACE_CURRENT}}",   format_bytes(stat.current.used_bytes)),
         ("{{TOTAL_SPACE_CURRENT}}",  format_bytes(stat.current.total_bytes)),
-        // percent changes… arrow and value
-        ("{{STORAGE_USED_PREVIOUS_DAY_PERCENT_INCREASE}}",   fmt_percent_change(stat.current.percent_used, stat.previous_day.as_ref().map(|p| p.percent_used))),
-        ("{{STORAGE_USED_PREVIOUS_WEEK_PERCENT_INCREASE}}",  fmt_percent_change(stat.current.percent_used, stat.previous_week.as_ref().map(|p| p.percent_used))),
-        ("{{STORAGE_USED_PREVIOUS_MONTH_PERCENT_INCREASE}}", fmt_percent_change(stat.current.percent_used, stat.previous_month.as_ref().map(|p| p.percent_used))),
+        // Difference in storage utilization percentage points.
+        ("{{STORAGE_USED_PREVIOUS_DAY_PERCENT_INCREASE}}",   fmt_percent_difference(stat.current.percent_used, stat.previous_day.as_ref().map(|p| p.percent_used))),
+        ("{{STORAGE_USED_PREVIOUS_WEEK_PERCENT_INCREASE}}",  fmt_percent_difference(stat.current.percent_used, stat.previous_week.as_ref().map(|p| p.percent_used))),
+        ("{{STORAGE_USED_PREVIOUS_MONTH_PERCENT_INCREASE}}", fmt_percent_difference(stat.current.percent_used, stat.previous_month.as_ref().map(|p| p.percent_used))),
     ];
     for (ph, val) in pairs {
         entry = entry.replace(ph, &val);
@@ -530,20 +530,16 @@ pub fn format_range_iso_with_offset<Tz: TimeZone>(
     )
 }
 
-/// Formats a percentage change between a current and optional previous value:
-/// - Returns "↑x.xx%" if increased
-/// - Returns "↓x.xx%" if decreased
-/// - Returns "-" if no previous value is available
-fn fmt_percent_change(current: f64, previous_opt: Option<f64>) -> String {
+/// Formats the difference between current and optional previous percentages.
+/// - Returns "↑x.xx%" or "↓x.xx%" if previous exists and is non-zero
+/// - Returns "–" if no previous value
+fn fmt_percent_difference(current: f64, previous_opt: Option<f64>) -> String {
     if let Some(prev) = previous_opt {
-        if prev == 0.0 {
-            return "-".to_string(); // avoid divide by zero
-        }
-        let percent_change = ((current - prev) / prev) * 100.0;
-        let arrow = if percent_change >= 0.0 { "↑" } else { "↓" };
-        format!("{}{:.2}%", arrow, percent_change.abs())
+        let difference = current - prev;
+        let arrow = if difference >= 0.0 { "↑" } else { "↓" };
+        format!("{}{:.2}%", arrow, difference.abs())
     } else {
-        "-".to_string()
+        "-".into()
     }
 }
 
@@ -555,10 +551,10 @@ fn fmt_bytes_change_pct(current: i64, previous_opt: Option<i64>) -> String {
         if prev == 0 {
             return "–".into();
         }
-        let diff = current as f64 - prev as f64;
-        let pct  = diff / prev as f64 * 100.0;
-        let arrow = if pct >= 0.0 { "↑" } else { "↓" };
-        format!("{}{:.2}%", arrow, pct.abs())
+        let difference = current as f64 - prev as f64;
+        let percent_change = difference / prev as f64 * 100.0;
+        let arrow = if percent_change >= 0.0 { "↑" } else { "↓" };
+        format!("{}{:.2}%", arrow, percent_change.abs())
     } else {
         "-".into()
     }

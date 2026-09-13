@@ -26,7 +26,7 @@ COPY rust-server/src ./src
 COPY rust-server/html ./html
 
 # Finally build binary
-RUN cargo build --release
+RUN touch src/main.rs && cargo build --release
 
 # Runtime stage – slim down  
 FROM debian:bookworm-slim
