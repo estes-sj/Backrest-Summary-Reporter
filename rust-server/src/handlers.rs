@@ -544,7 +544,7 @@ pub async fn load_and_insert_storage_stats(
         }
 
         // filesystem stats
-        let total_bytes = total_space(path).map_err(|e| {
+        let total_bytes = i64::try_from(total_space(path).map_err(|e| {
             fail!(
                 cfg,
                 "Filesystem stat failed",
@@ -552,15 +552,31 @@ pub async fn load_and_insert_storage_stats(
                 path,
                 e
             )
+        })?)
+        .map_err(|_| {
+            fail!(
+                cfg,
+                "Filesystem stat failed",
+                "stat total {} exceeds PostgreSQL BIGINT capacity",
+                path
+            )
         })?;
 
-        let free_bytes = free_space(path).map_err(|e| {
+        let free_bytes = i64::try_from(free_space(path).map_err(|e| {
             fail!(
                 cfg,
                 "Filesystem stat failed",
                 "stat free {} failed: {}",
                 path,
                 e
+            )
+        })?)
+        .map_err(|_| {
+            fail!(
+                cfg,
+                "Filesystem stat failed",
+                "stat free {} exceeds PostgreSQL BIGINT capacity",
+                path
             )
         })?;
         let used_bytes = total_bytes.saturating_sub(free_bytes);
@@ -578,8 +594,8 @@ pub async fn load_and_insert_storage_stats(
         )
         .bind(path)
         .bind(&nickname)
-        .bind(used_bytes as i64)
-        .bind(total_bytes as i64)
+        .bind(used_bytes)
+        .bind(total_bytes)
         .execute(pool)
         .await
         .map_err(|e| {

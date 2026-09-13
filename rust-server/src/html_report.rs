@@ -70,12 +70,12 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
         entry = entry.replace(
             "{{SNAPSHOT_DATA_ADDED}}",
             &summary.data_added
-                .map_or("-".to_string(), |v| format_bytes(v as u64)),
+                .map_or("-".to_string(), format_bytes),
         );
         entry = entry.replace(
             "{{SNAPSHOT_TOTAL_PROCESSED}}",
             &summary.total_bytes_processed
-                .map_or("-".to_string(), |v| format_bytes(v as u64)),
+                .map_or("-".to_string(), format_bytes),
         );
         entry = entry.replace("{{SNAPSHOT_TOTAL_DURATION}}", &format_duration_secs(summary.total_duration.unwrap_or(0.0) as i64));
         entry = entry.replace("{{STORAGE_ERROR}}", summary.error.as_deref().unwrap_or("N/A"));
@@ -136,11 +136,11 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
         (et.total_snapshot_error
             + et.total_forget_error
             + et.total_prune_error
-            + et.total_check_error) as u64,
+            + et.total_check_error),
         (et.total_snapshot_warning
             + et.total_forget_warning
             + et.total_prune_warning
-            + et.total_check_warning) as u64,
+            + et.total_check_warning),
     );
     // Calculate previous-day status color
     let previous_day_status_color = report
@@ -152,11 +152,11 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
                 (pd.total_snapshot_error
                     + pd.total_forget_error
                     + pd.total_prune_error
-                    + pd.total_check_error) as u64,
+                    + pd.total_check_error),
                 (pd.total_snapshot_warning
                     + pd.total_forget_warning
                     + pd.total_prune_warning
-                    + pd.total_check_warning) as u64,
+                    + pd.total_check_warning),
             )
         })
         .unwrap_or("#d1ecf100");
@@ -170,11 +170,11 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
                 (pw.total_snapshot_error
                     + pw.total_forget_error
                     + pw.total_prune_error
-                    + pw.total_check_error) as u64,
+                    + pw.total_check_error),
                 (pw.total_snapshot_warning
                     + pw.total_forget_warning
                     + pw.total_prune_warning
-                    + pw.total_check_warning) as u64,
+                    + pw.total_check_warning),
             )
         })
         .unwrap_or("#d1ecf100");
@@ -188,11 +188,11 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
                 (pm.total_snapshot_error
                     + pm.total_forget_error
                     + pm.total_prune_error
-                    + pm.total_check_error) as u64,
+                    + pm.total_check_error),
                 (pm.total_snapshot_warning
                     + pm.total_forget_warning
                     + pm.total_prune_warning
-                    + pm.total_check_warning) as u64,
+                    + pm.total_check_warning),
             )
         })
         .unwrap_or("#d1ecf100");
@@ -222,10 +222,10 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     replacements.push(("{{TOTAL_CHECK_ERROR}}",      fmt_event_cell(et.total_check_error,        dash, "❌")));
 
     // Data added
-    let cur_bytes_added = et.total_data_added as u64;
-    let prev_day_bytes_added  = report.event_totals.previous_day.as_ref().map(|e| e.total_data_added as u64);
-    let prev_week_bytes_added = report.event_totals.previous_week.as_ref().map(|e| e.total_data_added as u64);
-    let prev_month_bytes_added= report.event_totals.previous_month.as_ref().map(|e| e.total_data_added as u64);
+    let cur_bytes_added = et.total_data_added;
+    let prev_day_bytes_added  = report.event_totals.previous_day.as_ref().map(|e| e.total_data_added);
+    let prev_week_bytes_added = report.event_totals.previous_week.as_ref().map(|e| e.total_data_added);
+    let prev_month_bytes_added= report.event_totals.previous_month.as_ref().map(|e| e.total_data_added);
 
     replacements.push(("{{TOTAL_DATA_ADDED}}", format_bytes(cur_bytes_added)));
     replacements.push(("{{TOTAL_DATA_ADDED_PREVIOUS_DAY}}",  prev_day_bytes_added.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
@@ -237,10 +237,10 @@ pub fn render_report_html(cfg: &Config, report: &GenerateReport) -> Result<Strin
     replacements.push(("{{PERCENT_TOTAL_DATA_ADDED_PREVIOUS_MONTH}}", fmt_bytes_change_pct(cur_bytes_added, prev_month_bytes_added)));
 
     // Data processed
-    let cur_bytes_processed = et.total_bytes_processed as u64;
-    let prev_day_bytes_processed  = report.event_totals.previous_day.as_ref().map(|e| e.total_bytes_processed as u64);
-    let prev_week_bytes_processed = report.event_totals.previous_week.as_ref().map(|e| e.total_bytes_processed as u64);
-    let prev_month_bytes_processed= report.event_totals.previous_month.as_ref().map(|e| e.total_bytes_processed as u64);
+    let cur_bytes_processed = et.total_bytes_processed;
+    let prev_day_bytes_processed  = report.event_totals.previous_day.as_ref().map(|e| e.total_bytes_processed);
+    let prev_week_bytes_processed = report.event_totals.previous_week.as_ref().map(|e| e.total_bytes_processed);
+    let prev_month_bytes_processed= report.event_totals.previous_month.as_ref().map(|e| e.total_bytes_processed);
 
     replacements.push(("{{TOTAL_DATA_PROCESSED}}", format_bytes(cur_bytes_processed)));
     replacements.push(("{{TOTAL_DATA_PROCESSED_PREVIOUS_DAY}}",  prev_day_bytes_processed.map_or_else(|| "–".to_string(), |b| format_bytes(b))));
@@ -361,8 +361,8 @@ fn render_storage_entry(template: &str, stat: &CurrentStorageStats) -> String {
         ("{{PERCENT_USED_COLOR}}", percent_used_color(stat.current.percent_used).to_string()),
         ("{{PERCENT_USED_CURRENT}}", format!("{:.2}", stat.current.percent_used)),
         ("{{PERCENT_FREE_CURRENT}}", format!("{:.2}", 100.0 - stat.current.percent_used)),
-        ("{{USED_SPACE_CURRENT}}",   format_bytes(stat.current.used_bytes as u64)),
-        ("{{TOTAL_SPACE_CURRENT}}",  format_bytes(stat.current.total_bytes as u64)),
+        ("{{USED_SPACE_CURRENT}}",   format_bytes(stat.current.used_bytes)),
+        ("{{TOTAL_SPACE_CURRENT}}",  format_bytes(stat.current.total_bytes)),
         // percent changes… arrow and value
         ("{{STORAGE_USED_PREVIOUS_DAY_PERCENT_INCREASE}}",   fmt_percent_change(stat.current.percent_used, stat.previous_day.as_ref().map(|p| p.percent_used))),
         ("{{STORAGE_USED_PREVIOUS_WEEK_PERCENT_INCREASE}}",  fmt_percent_change(stat.current.percent_used, stat.previous_week.as_ref().map(|p| p.percent_used))),
@@ -464,7 +464,7 @@ fn percent_used_color(pct: f64) -> &'static str {
 /// - ≥ 1 MB → “20.0 MB”
 /// - ≥ 1 KB → “512.0 KB”
 /// - else   → “123 B”
-fn format_bytes(bytes: u64) -> String {
+fn format_bytes(bytes: i64) -> String {
     const KB: f64 = 1024.0;
     const MB: f64 = KB * 1024.0;
     const GB: f64 = MB * 1024.0;
@@ -550,7 +550,7 @@ fn fmt_percent_change(current: f64, previous_opt: Option<f64>) -> String {
 /// Formats a percentage change between current and optional previous byte counts:
 /// - Returns "↑x.xx%" or "↓x.xx%" if previous exists and is non-zero
 /// - Returns "–" if no previous value or if previous is 0
-fn fmt_bytes_change_pct(current: u64, previous_opt: Option<u64>) -> String {
+fn fmt_bytes_change_pct(current: i64, previous_opt: Option<i64>) -> String {
     if let Some(prev) = previous_opt {
         if prev == 0 {
             return "–".into();
@@ -641,7 +641,7 @@ where
     }
 
     match opt.as_event_opt().map(|e| extractor(e)) {
-        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur as u64, Some(prev as u64)),
+        Some(prev) if prev >= 0 => fmt_bytes_change_pct(cur, Some(prev)),
         _ => "–".into(),
     }
 }
@@ -715,7 +715,7 @@ fn get_dirs_unmodified_change_pct<T: AsEventOpt>(cur: i64, opt: &T) -> String {
 }
 
 /// Decide a background color for the table cells based on whether there were errors, warnings, or neither
-fn status_color(errors: u64, warnings: u64) -> &'static str {
+fn status_color(errors: i64, warnings: i64) -> &'static str {
     if errors > 0 {
         "#f8d7da"   // error red
     } else if warnings > 0 {

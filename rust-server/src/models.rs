@@ -145,8 +145,8 @@ pub struct EventTotalsReport {
 pub struct StorageReport {
     pub location:    String,
     pub nickname:    Option<String>,
-    pub used_bytes:  u64,
-    pub total_bytes: u64,
+    pub used_bytes:  i64,
+    pub total_bytes: i64,
 }
 
 /// The JSON shape returned for the current storage report
