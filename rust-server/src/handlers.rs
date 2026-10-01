@@ -544,7 +544,7 @@ pub async fn load_and_insert_storage_stats(
         }
 
         // filesystem stats
-        let total_bytes = i64::try_from(total_space(path).map_err(|e| {
+        let total_bytes = total_space(path).map_err(|e| {
             fail!(
                 cfg,
                 "Filesystem stat failed",
@@ -552,17 +552,9 @@ pub async fn load_and_insert_storage_stats(
                 path,
                 e
             )
-        })?)
-        .map_err(|_| {
-            fail!(
-                cfg,
-                "Filesystem stat failed",
-                "stat total {} exceeds PostgreSQL BIGINT capacity",
-                path
-            )
         })?;
 
-        let free_bytes = i64::try_from(free_space(path).map_err(|e| {
+        let free_bytes = free_space(path).map_err(|e| {
             fail!(
                 cfg,
                 "Filesystem stat failed",
@@ -570,15 +562,17 @@ pub async fn load_and_insert_storage_stats(
                 path,
                 e
             )
-        })?)
-        .map_err(|_| {
-            fail!(
-                cfg,
-                "Filesystem stat failed",
-                "stat free {} exceeds PostgreSQL BIGINT capacity",
-                path
-            )
         })?;
+        let (total_bytes, free_bytes) = match (i64::try_from(total_bytes), i64::try_from(free_bytes)) {
+            (Ok(total_bytes), Ok(free_bytes)) => (total_bytes, free_bytes),
+            _ => {
+                tracing::warn!(
+                    "Skipping storage mount '{}': filesystem capacity cannot be represented as PostgreSQL BIGINT",
+                    path
+                );
+                continue;
+            }
+        };
         let used_bytes = total_bytes.saturating_sub(free_bytes);
 
         // insert
